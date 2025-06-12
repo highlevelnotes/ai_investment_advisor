@@ -11,6 +11,10 @@ from workflow import InvestmentWorkflow
 from agents.aimodels import UserProfile
 from agents.personalization_agent import PersonalizationAgent
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -501,17 +505,129 @@ def display_sentiment_analysis(results):
         st.dataframe(sentiment_df, use_container_width=True)
 
 def display_risk_analysis(results):
-    """리스크 분석 표시"""
+    """리스크 분석 표시 개선"""
     risk_analysis = results.get('risk_analysis', {})
     
+    st.header("⚠️ 포트폴리오 리스크 분석")
+    
     if not risk_analysis or 'error' in risk_analysis:
-        st.warning("리스크 분석 데이터가 없습니다.")
+        if 'error' in risk_analysis:
+            st.warning(f"⚠️ {risk_analysis['error']}")
+        else:
+            st.warning("리스크 분석 데이터가 없습니다.")
+        
+        # 기본 리스크 정보 표시
+        st.info("""
+        **리스크 분석이 제한적인 이유:**
+        - 충분한 과거 데이터 부족
+        - 데이터 형식 변환 문제
+        - 일부 종목의 데이터 품질 이슈
+        
+        **권장사항:**
+        - 더 많은 종목 선택
+        - 장기간 데이터가 있는 종목 우선 선택
+        """)
         return
     
-    st.header("⚠️ 포트폴리오 리스크 분석")
+    # 데이터 품질 정보 표시
+    if 'data_quality' in risk_analysis:
+        quality = risk_analysis['data_quality']
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("분석 종목 수", quality.get('tickers_analyzed', 0))
+        with col2:
+            st.metric("데이터 포인트", quality.get('data_points', 0))
+        with col3:
+            st.metric("분석 기간", quality.get('date_range', 'N/A'))
     
     # 최적화 결과
     if 'optimization' in risk_analysis:
         opt_data = risk_analysis['optimization']
+        
+        st.subheader("📊 포트폴리오 최적화 결과")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                "예상 연간 수익률",
+                f"{opt_data.get('expected_return', 0):.2%}"
+            )
+        
+        with col2:
+            st.metric(
+                "예상 변동성",
+                f"{opt_data.get('volatility', 0):.2%}"
+            )
+        
+        with col3:
+            st.metric(
+                "샤프 비율",
+                f"{opt_data.get('sharpe_ratio', 0):.2f}"
+            )
+        
+        # 최적 가중치 표시
+        if opt_data.get('weights'):
+            st.subheader("🎯 최적 포트폴리오 가중치")
+            
+            weights_df = pd.DataFrame([
+                {'종목': ticker, '가중치': f"{weight:.1%}"}
+                for ticker, weight in opt_data['weights'].items()
+                if weight > 0.01  # 1% 이상만 표시
+            ])
+            
+            if not weights_df.empty:
+                st.dataframe(weights_df, use_container_width=True)
+    
+    # 리스크 메트릭
+    if 'risk_metrics' in risk_analysis:
+        risk_metrics = risk_analysis['risk_metrics']
+        
+        st.subheader("📈 리스크 지표")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                "최대 낙폭 (MDD)",
+                f"{risk_metrics.get('max_drawdown', 0):.2%}"
+            )
+            st.metric(
+                "베타",
+                f"{risk_metrics.get('beta', 0):.2f}"
+            )
+        
+        with col2:
+            st.metric(
+                "소르티노 비율",
+                f"{risk_metrics.get('sortino_ratio', 0):.2f}"
+            )
+            st.metric(
+                "정보 비율",
+                f"{risk_metrics.get('information_ratio', 0):.2f}"
+            )
+    
+    # VaR 분석
+    if 'var_analysis' in risk_analysis:
+        var_data = risk_analysis['var_analysis']
+        
+        st.subheader("💰 VaR (Value at Risk) 분석")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                "Historical VaR (5%)",
+                f"{var_data.get('historical_var_5%', 0):.2%}"
+            )
+        
+        with col2:
+            st.metric(
+                "Expected Shortfall",
+                f"{var_data.get('expected_shortfall', 0):.2%}"
+            )
+        
+        st.info("💡 VaR는 95% 신뢰구간에서 예상되는 최대 손실률을 나타냅니다.")
 
 main()

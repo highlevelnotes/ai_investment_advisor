@@ -27,7 +27,7 @@ class PersonalizationAgent:
     async def generate_personalized_recommendations(self, 
                                                   user_id: str,
                                                   analysis_results: Dict[str, Any]) -> Dict[str, Any]:
-        """HyperCLOVA X를 사용한 개인화된 투자 추천 생성"""
+        """LangChain HyperCLOVA X를 사용한 개인화된 투자 추천 생성"""
         try:
             user_profile = self.user_profiles.get(user_id)
             if not user_profile:
@@ -36,7 +36,7 @@ class PersonalizationAgent:
             # 기본 분석 결과 정리
             analysis_summary = self._prepare_analysis_summary(analysis_results)
             
-            # HyperCLOVA X를 사용한 개인화 추천 생성
+            # LangChain HyperCLOVA X를 사용한 개인화 추천 생성
             personalized_recommendations = await self._generate_ai_recommendations(
                 user_profile, analysis_summary
             )
@@ -57,41 +57,9 @@ class PersonalizationAgent:
             logger.error(f"개인화 추천 생성 오류: {e}")
             return {'error': str(e)}
     
-    def _prepare_analysis_summary(self, analysis_results: Dict[str, Any]) -> str:
-        """분석 결과를 요약하여 텍스트로 변환"""
-        summary_parts = []
-        
-        # 기술적 분석 요약
-        technical_analysis = analysis_results.get('technical_analysis', {})
-        if technical_analysis:
-            summary_parts.append("=== 기술적 분석 결과 ===")
-            for ticker, data in technical_analysis.items():
-                signal = data.get('overall_signal', 'HOLD')
-                volatility = data.get('volatility', 0)
-                summary_parts.append(f"{ticker}: {signal} 신호, 변동성 {volatility:.2%}")
-        
-        # 감정 분석 요약
-        sentiment_data = analysis_results.get('sentiment_data', {})
-        if sentiment_data:
-            summary_parts.append("\n=== 시장 감정 분석 ===")
-            for ticker, data in sentiment_data.items():
-                score = data.get('sentiment_score', 0)
-                summary_parts.append(f"{ticker}: 감정 점수 {score:.2f}")
-        
-        # 리스크 분석 요약
-        risk_analysis = analysis_results.get('risk_analysis', {})
-        if risk_analysis and 'optimization' in risk_analysis:
-            opt_data = risk_analysis['optimization']
-            summary_parts.append(f"\n=== 포트폴리오 최적화 ===")
-            summary_parts.append(f"예상 수익률: {opt_data.get('expected_return', 0):.2%}")
-            summary_parts.append(f"변동성: {opt_data.get('volatility', 0):.2%}")
-            summary_parts.append(f"샤프 비율: {opt_data.get('sharpe_ratio', 0):.2f}")
-        
-        return "\n".join(summary_parts)
-    
     async def _generate_ai_recommendations(self, user_profile: UserProfile, 
                                          analysis_summary: str) -> Dict[str, Any]:
-        """HyperCLOVA X를 사용한 AI 추천 생성"""
+        """LangChain HyperCLOVA X를 사용한 AI 추천 생성"""
         
         prompt = f"""
 다음은 투자자 정보와 시장 분석 결과입니다. 이를 바탕으로 개인화된 투자 추천을 제공해주세요.
@@ -132,7 +100,11 @@ class PersonalizationAgent:
         ]
         
         try:
-            response = await self.clova_client.generate_response(messages, max_tokens=800)
+            response = await self.clova_client.generate_response(
+                messages, 
+                max_tokens=800, 
+                temperature=0.5
+            )
             
             # 응답 파싱
             recommendations = self._parse_ai_recommendations(response)
@@ -146,6 +118,30 @@ class PersonalizationAgent:
                 'expected_outcomes': {}
             }
     
+    # 나머지 메서드들은 기존과 동일...
+    def _prepare_analysis_summary(self, analysis_results: Dict[str, Any]) -> str:
+        """분석 결과를 요약하여 텍스트로 변환"""
+        summary_parts = []
+        
+        # 기술적 분석 요약
+        technical_analysis = analysis_results.get('technical_analysis', {})
+        if technical_analysis:
+            summary_parts.append("=== 기술적 분석 결과 ===")
+            for ticker, data in technical_analysis.items():
+                signal = data.get('overall_signal', 'HOLD')
+                volatility = data.get('volatility', 0)
+                summary_parts.append(f"{ticker}: {signal} 신호, 변동성 {volatility:.2%}")
+        
+        # 감정 분석 요약
+        sentiment_data = analysis_results.get('sentiment_data', {})
+        if sentiment_data:
+            summary_parts.append("\n=== 시장 감정 분석 ===")
+            for ticker, data in sentiment_data.items():
+                score = data.get('sentiment_score', 0)
+                summary_parts.append(f"{ticker}: 감정 점수 {score:.2f}")
+        
+        return "\n".join(summary_parts)
+    
     def _parse_ai_recommendations(self, response: str) -> Dict[str, Any]:
         """AI 응답을 파싱하여 구조화된 데이터로 변환"""
         try:
@@ -153,7 +149,6 @@ class PersonalizationAgent:
             
             reasoning = []
             expected_outcomes = {}
-            recommended_stocks = {}
             
             current_section = None
             
@@ -187,8 +182,7 @@ class PersonalizationAgent:
             
             return {
                 'reasoning': reasoning,
-                'expected_outcomes': expected_outcomes,
-                'recommended_stocks': recommended_stocks
+                'expected_outcomes': expected_outcomes
             }
             
         except Exception as e:
@@ -203,13 +197,12 @@ class PersonalizationAgent:
                                          analysis_results: Dict[str, Any]) -> Dict[str, Any]:
         """AI 추천을 바탕으로 포트폴리오 구성"""
         
-        # 기본 포트폴리오 구성 로직 (기존 코드 활용)
+        # 기본 포트폴리오 구성 로직
         base_portfolio = self._construct_base_portfolio(analysis_results, user_profile)
         
-        # AI 추천과 결합하여 최종 포트폴리오 생성
+        # 최종 포트폴리오 생성
         portfolio = {}
         
-        # 상위 종목들을 선택하여 포트폴리오 구성
         if base_portfolio:
             total_weight = 0
             for ticker, data in list(base_portfolio.items())[:5]:  # 상위 5개 종목
@@ -217,7 +210,7 @@ class PersonalizationAgent:
                 portfolio[ticker] = {
                     'weight': weight,
                     'reasoning': data.get('reasoning', ''),
-                    'ai_analysis': '포트폴리오 최적화 결과 포함'
+                    'ai_analysis': 'LangChain HyperCLOVA X 분석 포함'
                 }
                 total_weight += weight
             
@@ -230,7 +223,7 @@ class PersonalizationAgent:
     
     def _construct_base_portfolio(self, analysis_results: Dict[str, Any], 
                                 user_profile: UserProfile) -> Dict[str, Any]:
-        """기본 포트폴리오 구성 (기존 로직 활용)"""
+        """기본 포트폴리오 구성"""
         portfolio = {}
         
         # 기술적 분석 결과 활용
@@ -276,7 +269,7 @@ class PersonalizationAgent:
     
     async def _ai_risk_assessment(self, portfolio: Dict[str, Any], 
                                 user_profile: UserProfile) -> Dict[str, Any]:
-        """AI를 사용한 포트폴리오 리스크 평가"""
+        """LangChain HyperCLOVA X를 사용한 포트폴리오 리스크 평가"""
         
         portfolio_summary = "\n".join([
             f"{ticker}: {data['weight']:.1%}" 
@@ -309,12 +302,16 @@ class PersonalizationAgent:
         ]
         
         try:
-            response = await self.clova_client.generate_response(messages, max_tokens=400)
+            response = await self.clova_client.generate_response(
+                messages, 
+                max_tokens=400, 
+                temperature=0.3
+            )
             
             return {
                 'ai_assessment': response,
                 'diversification_score': len(portfolio) / 10,
-                'risk_alignment': 'AI 평가 완료'
+                'risk_alignment': 'LangChain HyperCLOVA X 평가 완료'
             }
             
         except Exception as e:

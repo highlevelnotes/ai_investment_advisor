@@ -1,73 +1,65 @@
-# agents/hyperclova_client.py 수정
+# agents/hyperclova_client.py
 import os
-import json
-import requests
-import aiohttp
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import logging
+from langchain_naver import ChatClovaX
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
 class HyperCLOVAXClient:
     def __init__(self):
-        self.api_key = os.getenv("NCP_CLOVASTUDIO_API_KEY")
-        self.apigw_key = os.getenv("NCP_APIGW_API_KEY")
-        
-        # API 키 검증
-        if not self.api_key or not self.apigw_key:
-            logger.error("HyperCLOVA X API 키가 설정되지 않았습니다.")
-            self.use_fallback = True
-        else:
-            self.use_fallback = False
+        try:
+            # LangChain을 통한 HyperCLOVA X 초기화
+            self.chat = ChatClovaX(
+                model="HCX-005",
+                temperature=0.7,
+                max_tokens=500,
+                timeout=30,
+                max_retries=2
+            )
+            self.available = True
+            logger.info("HyperCLOVA X (HCX-005) 모델 초기화 완료")
             
-        self.host = "https://clovastudio.stream.ntruss.com"
-        self.request_id = "investment-advisor-001"
-        
-    def _get_headers(self):
-        return {
-            "Content-Type": "application/json; charset=utf-8",
-            "X-NCP-CLOVASTUDIO-API-KEY": self.api_key,
-            "X-NCP-APIGW-API-KEY": self.apigw_key,
-            "X-NCP-CLOVASTUDIO-REQUEST-ID": self.request_id
-        }
+        except Exception as e:
+            logger.error(f"HyperCLOVA X 초기화 실패: {e}")
+            self.available = False
     
     async def generate_response(self, messages: List[Dict[str, str]], 
                               max_tokens: int = 500,
                               temperature: float = 0.7) -> str:
-        """HyperCLOVA X를 사용하여 응답 생성 (폴백 포함)"""
+        """LangChain을 통한 HyperCLOVA X 응답 생성"""
         
-        if self.use_fallback:
+        if not self.available:
             return await self._fallback_analysis(messages)
         
-        url = f"{self.host}/testapp/v1/chat-completions/HCX-003"
-        
-        data = {
-            "messages": messages,
-            "maxTokens": max_tokens,
-            "temperature": temperature,
-            "topP": 0.8,
-            "repeatPenalty": 5.0,
-            "includeAiFilters": True
-        }
-        
         try:
-            timeout = aiohttp.ClientTimeout(total=30)  # 타임아웃 설정
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(url, json=data, headers=self._get_headers()) as response:
-                    if response.status == 200:
-                        response_data = await response.json()
-                        return response_data["result"]["message"]["content"]
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"HyperCLOVA X API 오류: {response.status} - {error_text}")
-                        return await self._fallback_analysis(messages)
-                        
+            # LangChain 메시지 형식으로 변환
+            langchain_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    langchain_messages.append(SystemMessage(content=msg["content"]))
+                elif msg["role"] == "user":
+                    langchain_messages.append(HumanMessage(content=msg["content"]))
+            
+            # 모델 파라미터 동적 설정
+            chat_with_params = ChatClovaX(
+                model="HCX-005",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=30
+            )
+            
+            # 응답 생성
+            response = await chat_with_params.ainvoke(langchain_messages)
+            return response.content
+            
         except Exception as e:
             logger.error(f"HyperCLOVA X 요청 오류: {e}")
             return await self._fallback_analysis(messages)
     
     async def _fallback_analysis(self, messages: List[Dict[str, str]]) -> str:
-        """API 실패 시 대체 감정 분석"""
+        """API 실패 시 대체 분석"""
         user_message = messages[-1]["content"] if messages else ""
         
         # 한국어 금융 키워드 기반 감정 분석
