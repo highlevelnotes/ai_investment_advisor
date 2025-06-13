@@ -16,6 +16,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from sentiment_analyzer import RealSentimentAnalyzer
 from scenario_analyzer import AdvancedScenarioAnalyzer
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # 환경 설정
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 nest_asyncio.apply()
@@ -26,7 +30,7 @@ class StockAnalysisAgent:
             self.llm = ChatClovaX(
                 model="HCX-005",
                 temperature=0.3,
-                max_tokens=300
+                max_tokens=3000
             )
             self.llm_available = True
         except:
@@ -182,8 +186,8 @@ if selected_stock:
             info = stock.info
             hist = stock.history(period="30d")
             
-            current_price = info.get('currentPrice', hist['Close'][-1])
-            prev_close = info.get('previousClose', hist['Close'][-2])
+            current_price = info.get('currentPrice', hist['Close'].iloc[-1] if not hist.empty else 0)
+            prev_close = info.get('previousClose', hist['Close'].iloc[-2] if len(hist) > 1 else 0)
             change = current_price - prev_close
             change_percent = (change / prev_close) * 100
             
@@ -613,12 +617,12 @@ if selected_stock:
         scenario_analyzer = AdvancedScenarioAnalyzer()
         
         try:
-            scenario_result = asyncio.run(scenario_analyzer.analyze_investment_scenarios(
+            scenario_result = scenario_analyzer.analyze_investment_scenarios(
                 selected_stock, 
                 {'current_price': current_price, 'change_percent': change_percent},
                 technical_results,
                 sentiment_result
-            ))
+            )
         except Exception as e:
             scenario_result = scenario_analyzer._get_fallback_scenarios(
                 selected_stock, 
