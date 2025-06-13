@@ -6,7 +6,7 @@ import pandas as pd
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import logging
-from config import Config
+from old_ver_1.config import Config
 
 logger = logging.getLogger(__name__)
 

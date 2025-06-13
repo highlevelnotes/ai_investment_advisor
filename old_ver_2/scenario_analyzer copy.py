@@ -1,4 +1,4 @@
-# scenario_analyzer.py (수정된 전체 코드)
+# scenario_analyzer.py
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Any, Tuple
@@ -44,8 +44,8 @@ class AdvancedScenarioAnalyzer:
                 monte_carlo_results, technical_analysis, sentiment_data
             )
             
-            # 4. AI 기반 시나리오 해석 (동기 버전 사용)
-            ai_interpretation = self._generate_ai_scenario_interpretation_sync(
+            # 4. AI 기반 시나리오 해석
+            ai_interpretation = self._generate_ai_scenario_interpretation(
                 ticker, adjusted_scenarios, current_data
             )
             
@@ -188,11 +188,9 @@ class AdvancedScenarioAnalyzer:
         
         # 백분위수 계산
         p10 = np.percentile(monte_carlo_results, 10)
-        p20 = np.percentile(monte_carlo_results, 20)
         p25 = np.percentile(monte_carlo_results, 25)
         p50 = np.percentile(monte_carlo_results, 50)
         p75 = np.percentile(monte_carlo_results, 75)
-        p80 = np.percentile(monte_carlo_results, 80)
         p90 = np.percentile(monte_carlo_results, 90)
         
         current_price = np.mean(monte_carlo_results) / 1.08  # 역산으로 현재가 추정
@@ -201,7 +199,7 @@ class AdvancedScenarioAnalyzer:
             'bull_case': {
                 'probability': 0.20,
                 'return_range': ((p75/current_price - 1), (p90/current_price - 1)),
-                'price_target': p80,
+                'price_target': (p80 := np.percentile(monte_carlo_results, 80)),
                 'description': '강세 시나리오'
             },
             'base_case': {
@@ -213,7 +211,7 @@ class AdvancedScenarioAnalyzer:
             'bear_case': {
                 'probability': 0.30,
                 'return_range': ((p10/current_price - 1), (p25/current_price - 1)),
-                'price_target': p20,
+                'price_target': (p20 := np.percentile(monte_carlo_results, 20)),
                 'description': '약세 시나리오'
             }
         }
@@ -319,21 +317,21 @@ class AdvancedScenarioAnalyzer:
             scenario_summary += f"\n{name}: {prob:.0%} 확률, 목표가 ${target:.2f} ({return_pct:+.1f}%)"
         
         prompt = f"""
-{ticker} 주식의 시나리오 분석 결과를 전문가 관점에서 해석해주세요.
+    {ticker} 주식의 시나리오 분석 결과를 전문가 관점에서 해석해주세요.
 
-현재 상황:
-- 현재가: ${current_price:.2f}
+    현재 상황:
+    - 현재가: ${current_price:.2f}
 
-시나리오 분석 결과:{scenario_summary}
+    시나리오 분석 결과:{scenario_summary}
 
-다음 관점에서 상세히 분석해주세요:
-1. 각 시나리오의 실현 가능성과 근거
-2. 주요 위험 요소와 기회 요소
-3. 투자자가 주의깊게 모니터링해야 할 지표
-4. 시나리오별 대응 전략
+    다음 관점에서 상세히 분석해주세요:
+    1. 각 시나리오의 실현 가능성과 근거
+    2. 주요 위험 요소와 기회 요소
+    3. 투자자가 주의깊게 모니터링해야 할 지표
+    4. 시나리오별 대응 전략
 
-실용적이고 구체적인 투자 인사이트를 제공해주세요.
-"""
+    실용적이고 구체적인 투자 인사이트를 제공해주세요.
+    """
         
         messages = [
             SystemMessage(content="당신은 20년 경력의 전문 투자 분석가입니다. 시나리오 분석을 바탕으로 심도있는 투자 인사이트를 제공해주세요."),
@@ -346,6 +344,7 @@ class AdvancedScenarioAnalyzer:
         except Exception as e:
             logger.warning(f"AI 해석 생성 실패: {e}")
             return self._generate_simple_interpretation(scenarios)
+
     
     def _analyze_risk_scenarios(self, ticker: str, current_data: Dict[str, Any], 
                               volatility_data: Dict[str, float]) -> Dict[str, Any]:

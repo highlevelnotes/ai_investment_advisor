@@ -4,7 +4,10 @@ from typing import List, Dict, Any
 import logging
 from langchain_naver import ChatClovaX
 from langchain_core.messages import HumanMessage, SystemMessage
-from news_collector import NewsCollector
+from old_ver_2.news_collector import NewsCollector
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +17,7 @@ class RealSentimentAnalyzer:
             self.llm = ChatClovaX(
                 model="HCX-005",
                 temperature=0.1,  # 감정 분석은 일관성이 중요
-                max_tokens=200
+                max_tokens=3000
             )
             self.llm_available = True
         except:
