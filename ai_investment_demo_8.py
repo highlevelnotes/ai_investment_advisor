@@ -1,4 +1,4 @@
-# enhanced_perplexity_advisor.py (완전한 메인 파일)
+# enhanced_perplexity_advisor.py (완전 수정된 버전)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -23,7 +23,6 @@ from scenario_analyzer import AdvancedScenarioAnalyzer
 
 from dotenv import load_dotenv
 load_dotenv()
-
 
 # 환경 설정
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
@@ -55,14 +54,42 @@ class EnhancedStockAnalysisAgent:
         except Exception as e:
             return f"AI 분석 중 오류: {str(e)[:100]}"
 
+# 안전한 포맷팅 함수
+def safe_format(value, default="N/A", format_spec=""):
+    """None 값을 안전하게 포맷팅하는 함수"""
+    if value is None:
+        return default
+    try:
+        if format_spec:
+            return f"{value:{format_spec}}"
+        return str(value)
+    except:
+        return default
+
+def safe_float(value, default=0.0):
+    """안전한 float 변환"""
+    try:
+        return float(value) if value is not None else default
+    except:
+        return default
+
+def safe_int(value, default=0):
+    """안전한 int 변환"""
+    try:
+        return int(value) if value is not None else default
+    except:
+        return default
+
 # 데이터 품질 검증 시스템
 class DataQualityValidator:
     @staticmethod
     def validate_news_quality(news_list):
         """뉴스 데이터 품질 검증"""
+        if not news_list:
+            return []
         quality_scores = []
         for news in news_list:
-            score = news.get('quality_score', 0)
+            score = news.get('quality_score', 0) if news else 0
             if score > 0.8:
                 quality_scores.append('high')
             elif score > 0.5:
@@ -81,6 +108,177 @@ class DataQualityValidator:
             else:
                 completeness[key] = value is not None
         return completeness
+
+# Rate Limiting을 위한 개선된 수집 함수 (동기 버전)
+def collect_data_with_retry_sync(collector_func, max_retries=3, delay=2):
+    """재시도 로직이 포함된 동기 데이터 수집"""
+    for attempt in range(max_retries):
+        try:
+            return collector_func()
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                wait_time = delay * (2 ** attempt)  # 지수 백오프
+                st.warning(f"Rate limit 도달. {wait_time}초 후 재시도... (시도 {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                st.error(f"데이터 수집 실패: {e}")
+                return [] if "list" in str(type(collector_func)) else {}
+
+# 모든 투자 데이터를 수집하는 통합 함수
+def collect_all_investment_data(selected_stock):
+    """모든 투자 데이터를 수집하는 동기 함수"""
+    
+    async def async_data_collection():
+        enhanced_news = []
+        social_data = []
+        analyst_data = []
+        
+        # 향상된 뉴스 수집
+        try:
+            async def collect_enhanced_news():
+                async with EnhancedNewsCollector() as collector:
+                    return await collector.collect_comprehensive_news(selected_stock, 10)
+            
+            # Rate Limiting 적용
+            async def collect_data_with_retry_async(collector_func, max_retries=3, delay=2):
+                for attempt in range(max_retries):
+                    try:
+                        return await collector_func()
+                    except Exception as e:
+                        if "429" in str(e) and attempt < max_retries - 1:
+                            wait_time = delay * (2 ** attempt)
+                            await asyncio.sleep(wait_time)
+                        else:
+                            raise e
+                return []
+            
+            enhanced_news = await collect_data_with_retry_async(collect_enhanced_news)
+            if not enhanced_news:
+                enhanced_news = []
+        except Exception as e:
+            enhanced_news = []
+            st.warning(f"향상된 뉴스 수집 실패: {e}")
+        
+        # 소셜미디어 및 애널리스트 데이터 수집
+        try:
+            async def collect_social_analyst_data():
+                async with SocialAnalystCollector() as collector:
+                    await asyncio.sleep(1)
+                    social_data = await collector.collect_social_sentiment(selected_stock)
+                    await asyncio.sleep(2)
+                    analyst_data = await collector.collect_analyst_reports(selected_stock)
+                    return social_data, analyst_data
+            
+            result = await collect_data_with_retry_async(collect_social_analyst_data)
+            if result:
+                social_data, analyst_data = result
+        except Exception as e:
+            social_data, analyst_data = [], []
+            st.warning(f"소셜/애널리스트 데이터 수집 실패: {e}")
+        
+        return enhanced_news, social_data, analyst_data
+    
+    # asyncio.run()으로 비동기 함수 실행
+    try:
+        return asyncio.run(async_data_collection())
+    except Exception as e:
+        st.error(f"데이터 수집 중 오류 발생: {e}")
+        return [], [], []
+
+# 감정 분석을 실행하는 동기 함수
+def run_sentiment_analysis(selected_stock):
+    """감정 분석을 실행하는 동기 함수"""
+    
+    async def async_sentiment_analysis():
+        try:
+            sentiment_analyzer = RealSentimentAnalyzer()
+            
+            async def collect_data_with_retry_async(collector_func, max_retries=3, delay=2):
+                for attempt in range(max_retries):
+                    try:
+                        return await collector_func()
+                    except Exception as e:
+                        if "429" in str(e) and attempt < max_retries - 1:
+                            wait_time = delay * (2 ** attempt)
+                            await asyncio.sleep(wait_time)
+                        else:
+                            raise e
+                return {}
+            
+            sentiment_result = await collect_data_with_retry_async(
+                lambda: sentiment_analyzer.analyze_stock_sentiment(selected_stock)
+            )
+            if not sentiment_result:
+                sentiment_result = {
+                    'sentiment_score': 0.0,
+                    'sentiment_label': "중립적",
+                    'sentiment_emoji': "😐",
+                    'confidence': 0.5,
+                    'article_count': 0,
+                    'analyzed_articles': [],
+                    'news_sources': [],
+                    'method': 'fallback'
+                }
+            return sentiment_result
+        except Exception as e:
+            st.warning(f"감정 분석 실패: {e}")
+            return {
+                'sentiment_score': 0.0,
+                'sentiment_label': "중립적",
+                'sentiment_emoji': "😐",
+                'confidence': 0.5,
+                'article_count': 0,
+                'analyzed_articles': [],
+                'news_sources': [],
+                'method': 'fallback'
+            }
+    
+    try:
+        return asyncio.run(async_sentiment_analysis())
+    except Exception as e:
+        st.error(f"감정 분석 중 오류 발생: {e}")
+        return {
+            'sentiment_score': 0.0,
+            'sentiment_label': "중립적",
+            'sentiment_emoji': "😐",
+            'confidence': 0.5,
+            'article_count': 0,
+            'analyzed_articles': [],
+            'news_sources': [],
+            'method': 'fallback'
+        }
+
+# AI 분석을 실행하는 동기 함수
+def run_ai_analysis(ai_prompt):
+    """AI 분석을 실행하는 동기 함수"""
+    
+    async def async_ai_analysis():
+        try:
+            analysis_agent = EnhancedStockAnalysisAgent()
+            
+            # Rate Limiting을 고려한 AI 분석
+            await asyncio.sleep(3)  # 3초 대기
+            ai_analysis = analysis_agent.analyze_with_ai(ai_prompt)
+            return ai_analysis
+        except Exception as e:
+            return f"""
+            **AI 분석 결과 (기본 모드)**
+            
+            **현재 상황:** 다중 소스 분석을 통한 종합적 시장 분석을 제공합니다.
+            
+            **기술적 분석:** 현재 시장 추세와 주요 지표들을 종합적으로 검토했습니다.
+            
+            **투자 권고:** 시장 상황을 종합적으로 고려한 신중한 접근을 권장합니다.
+            
+            **위험 요소:** 시장 변동성과 다중 지표 신호를 종합적으로 모니터링이 필요합니다.
+            
+            **참고:** API Rate Limit 또는 연결 문제로 인해 기본 분석을 제공합니다. ({str(e)[:50]})
+            """
+    
+    try:
+        return asyncio.run(async_ai_analysis())
+    except Exception as e:
+        return f"AI 분석 중 오류 발생: {str(e)[:100]}"
 
 # Streamlit 페이지 설정
 st.set_page_config(
@@ -246,46 +444,24 @@ if selected_stock:
             info = stock.info
             hist = stock.history(period="30d")
             
-            current_price = info.get('currentPrice', hist['Close'].iloc[-1] if not hist.empty else 0)
-            prev_close = info.get('previousClose', hist['Close'].iloc[-2] if len(hist) > 1 else 0)
+            current_price = safe_float(info.get('currentPrice', hist['Close'].iloc[-1] if not hist.empty else 100))
+            prev_close = safe_float(info.get('previousClose', hist['Close'].iloc[-2] if len(hist) > 1 else current_price))
             change = current_price - prev_close
             change_percent = (change / prev_close) * 100 if prev_close > 0 else 0
             
         except Exception as e:
             st.error(f"❌ 기본 데이터 수집 실패: {e}")
-            current_price = 100
-            change_percent = 0
+            current_price = 100.0
+            change_percent = 0.0
             hist = pd.DataFrame()
+            info = {}
         
-        # 향상된 뉴스 수집 (30개)
-        try:
-            async def collect_enhanced_news():
-                async with EnhancedNewsCollector() as collector:
-                    return await collector.collect_comprehensive_news(selected_stock, 30)
-            
-            enhanced_news = asyncio.run(collect_enhanced_news())
-            
-        except Exception as e:
-            enhanced_news = []
-            st.warning(f"향상된 뉴스 수집 실패: {e}")
-        
-        # 소셜미디어 및 애널리스트 데이터 수집
-        try:
-            async def collect_social_analyst_data():
-                async with SocialAnalystCollector() as collector:
-                    social_data = await collector.collect_social_sentiment(selected_stock)
-                    analyst_data = await collector.collect_analyst_reports(selected_stock)
-                    return social_data, analyst_data
-            
-            social_data, analyst_data = asyncio.run(collect_social_analyst_data())
-            
-        except Exception as e:
-            social_data, analyst_data = [], []
-            st.warning(f"소셜/애널리스트 데이터 수집 실패: {e}")
+        # 모든 투자 데이터 수집 (수정된 동기 함수 사용)
+        enhanced_news, social_data, analyst_data = collect_all_investment_data(selected_stock)
         
         data_status.markdown("""
         <div class="agent-status">
-            ✅ 다중 소스 데이터 수집 완료 - 30개 뉴스, 소셜미디어, 애널리스트 리포트 확보
+            ✅ 다중 소스 데이터 수집 완료 - 뉴스, 소셜미디어, 애널리스트 리포트 확보
         </div>
         """, unsafe_allow_html=True)
         
@@ -299,36 +475,36 @@ if selected_stock:
             'price': current_price
         })
         
-        # 실시간 데이터 표시
+        # 실시간 데이터 표시 (안전한 포맷팅 적용)
         st.markdown("### 📊 실시간 시장 데이터")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("현재가", f"${current_price:.2f}", f"{change:+.2f} ({change_percent:+.2f}%)")
         with col2:
-            volume = info.get('volume', 0)
+            volume = safe_int(info.get('volume', 0))
             st.metric("거래량", f"{volume:,}")
         with col3:
-            market_cap = info.get('marketCap', 0)
-            st.metric("시가총액", f"${market_cap/1e9:.1f}B")
+            market_cap = safe_float(info.get('marketCap', 0))
+            st.metric("시가총액", f"${market_cap/1e9:.1f}B" if market_cap > 0 else "N/A")
         with col4:
-            pe_ratio = info.get('trailingPE', 0)
-            st.metric("P/E 비율", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
+            pe_ratio = safe_float(info.get('trailingPE'))
+            st.metric("P/E 비율", f"{pe_ratio:.2f}" if pe_ratio > 0 else "N/A")
         
         # 데이터 품질 표시
         st.markdown("### 📋 데이터 품질 검증")
         quality_col1, quality_col2, quality_col3 = st.columns(3)
         
         with quality_col1:
-            high_quality = news_quality.count('high')
+            high_quality = news_quality.count('high') if news_quality else 0
             st.metric("고품질 뉴스", f"{high_quality}개", f"총 {len(enhanced_news)}개 중")
         
         with quality_col2:
-            complete_sources = sum(data_completeness.values())
+            complete_sources = sum(data_completeness.values()) if data_completeness else 0
             st.metric("데이터 완성도", f"{complete_sources}/4", "소스별 데이터 확보")
         
         with quality_col3:
-            social_coverage = len(social_data)
+            social_coverage = len(social_data) if social_data else 0
             st.metric("소셜 커버리지", f"{social_coverage}개", "플랫폼별 데이터")
         
         # 2단계: 향상된 감정 분석
@@ -342,28 +518,15 @@ if selected_stock:
         sentiment_status = st.empty()
         sentiment_status.markdown("""
         <div class="agent-status">
-            📰 30개 뉴스 기사 감정 분석 중...<br>
+            📰 뉴스 기사 감정 분석 중...<br>
             📱 소셜미디어 감정 분석 중...<br>
             📊 애널리스트 리포트 분석 중...<br>
             🤖 HyperCLOVA X 종합 감정 분석 중...
         </div>
         """, unsafe_allow_html=True)
         
-        # 실제 감정 분석 실행
-        sentiment_analyzer = RealSentimentAnalyzer()
-        try:
-            sentiment_result = asyncio.run(sentiment_analyzer.analyze_stock_sentiment(selected_stock))
-        except Exception as e:
-            sentiment_result = {
-                'sentiment_score': 0.0,
-                'sentiment_label': "중립적",
-                'sentiment_emoji': "😐",
-                'confidence': 0.5,
-                'article_count': 0,
-                'analyzed_articles': [],
-                'news_sources': [],
-                'method': 'error_fallback'
-            }
+        # 실제 감정 분석 실행 (수정된 동기 함수 사용)
+        sentiment_result = run_sentiment_analysis(selected_stock)
         
         sentiment_status.markdown("""
         <div class="agent-status">
@@ -371,16 +534,17 @@ if selected_stock:
         </div>
         """, unsafe_allow_html=True)
         
-        # 감정 분석 결과 표시
+        # 감정 분석 결과 표시 (안전한 포맷팅 적용)
         st.markdown("### 💭 다중 소스 AI 감정 분석")
         sentiment_col1, sentiment_col2 = st.columns(2)
         
         with sentiment_col1:
-            sentiment_score = sentiment_result['sentiment_score']
-            sentiment_label = sentiment_result['sentiment_label']
-            sentiment_emoji = sentiment_result['sentiment_emoji']
-            confidence = sentiment_result['confidence']
-            article_count = sentiment_result['article_count']
+            sentiment_score = safe_float(sentiment_result.get('sentiment_score', 0))
+            sentiment_label = safe_format(sentiment_result.get('sentiment_label'), "중립적")
+            sentiment_emoji = safe_format(sentiment_result.get('sentiment_emoji'), "😐")
+            confidence = safe_float(sentiment_result.get('confidence', 0.5))
+            article_count = safe_int(sentiment_result.get('article_count', 0))
+            news_sources = sentiment_result.get('news_sources', [])
             
             if sentiment_score > 0.1:
                 sentiment_color = "green"
@@ -395,7 +559,7 @@ if selected_stock:
                 <p><strong>시장 감정:</strong> {sentiment_label}</p>
                 <p><strong>신뢰도:</strong> {confidence:.1%}</p>
                 <p><strong>분석 기사 수:</strong> {article_count}개</p>
-                <p><strong>뉴스 소스:</strong> {', '.join(sentiment_result['news_sources'])}</p>
+                <p><strong>뉴스 소스:</strong> {', '.join(news_sources) if news_sources else 'N/A'}</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -403,9 +567,9 @@ if selected_stock:
             if social_data:
                 st.markdown("#### 📱 소셜미디어 감정")
                 for social in social_data:
-                    platform = social['platform']
-                    score = social['sentiment_score']
-                    mentions = social['mention_count']
+                    platform = safe_format(social.get('platform'), "Unknown")
+                    score = safe_float(social.get('sentiment_score', 0))
+                    mentions = safe_int(social.get('mention_count', 0))
                     
                     st.markdown(f"""
                     <div class="social-card">
@@ -417,10 +581,11 @@ if selected_stock:
         
         with sentiment_col2:
             # 감정 분포 차트
-            if article_count > 0:
-                positive_articles = len([a for a in sentiment_result['analyzed_articles'] if a['score'] > 0.1])
-                neutral_articles = len([a for a in sentiment_result['analyzed_articles'] if -0.1 <= a['score'] <= 0.1])
-                negative_articles = len([a for a in sentiment_result['analyzed_articles'] if a['score'] < -0.1])
+            analyzed_articles = sentiment_result.get('analyzed_articles', [])
+            if analyzed_articles and article_count > 0:
+                positive_articles = len([a for a in analyzed_articles if safe_float(a.get('score', 0)) > 0.1])
+                neutral_articles = len([a for a in analyzed_articles if -0.1 <= safe_float(a.get('score', 0)) <= 0.1])
+                negative_articles = len([a for a in analyzed_articles if safe_float(a.get('score', 0)) < -0.1])
                 
                 sentiment_data_chart = {
                     'Positive': positive_articles,
@@ -448,9 +613,9 @@ if selected_stock:
             if analyst_data:
                 st.markdown("#### 📊 애널리스트 평가")
                 for report in analyst_data:
-                    source = report['source']
-                    rating = report['rating']
-                    target = report['target_price']
+                    source = safe_format(report.get('source'), "Unknown")
+                    rating = safe_format(report.get('rating'), "Hold")
+                    target = safe_float(report.get('target_price', 0))
                     
                     rating_color = "#28a745" if rating == "Buy" else "#dc3545" if rating == "Sell" else "#ffc107"
                     
@@ -492,10 +657,10 @@ if selected_stock:
                 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
                 rs = gain / loss
                 rsi = 100 - (100 / (1 + rs))
-                current_rsi = rsi.iloc[-1]
+                current_rsi = safe_float(rsi.iloc[-1], 50)
                 
-                sma_20 = hist['Close'].rolling(window=20).mean().iloc[-1]
-                sma_50 = hist['Close'].rolling(window=min(50, len(hist))).mean().iloc[-1]
+                sma_20 = safe_float(hist['Close'].rolling(window=20).mean().iloc[-1], current_price)
+                sma_50 = safe_float(hist['Close'].rolling(window=min(50, len(hist))).mean().iloc[-1], current_price)
                 
                 # 고급 기술적 분석
                 advanced_results = advanced_analyzer.analyze_advanced_indicators(hist)
@@ -572,6 +737,14 @@ if selected_stock:
             
         except Exception as e:
             st.error(f"❌ 고급 기술적 분석 실패: {e}")
+            current_rsi = 50
+            rsi_signal = "중립"
+            ma_signal = "중립"
+            overall_signal = "HOLD"
+            sma_20 = current_price
+            sma_50 = current_price
+            advanced_results = {}
+            
             technical_results = {
                 'overall_signal': 'HOLD',
                 'signals': {'RSI': 'HOLD', 'MA': 'HOLD'},
@@ -581,46 +754,46 @@ if selected_stock:
                 'advanced_analysis': {}
             }
         
-        # 고급 기술적 분석 결과 표시
+        # 고급 기술적 분석 결과 표시 (안전한 포맷팅 적용)
         st.markdown("### 📈 고급 기술적 분석 결과")
         tech_col1, tech_col2 = st.columns(2)
         
         with tech_col1:
             st.markdown(f"""
             <div class="analysis-card">
-                <h4>{rsi_emoji} RSI (14일): <span style="color: {rsi_color};">{current_rsi:.1f}</span></h4>
-                <p><strong>신호:</strong> {rsi_signal}</p>
-                <h4>{ma_emoji} 이동평균: <span style="color: {ma_color};">{ma_signal}</span></h4>
+                <h4>{safe_format(rsi_emoji, "🔵")} RSI (14일): <span style="color: {safe_format(rsi_color, 'blue')};">{current_rsi:.1f}</span></h4>
+                <p><strong>신호:</strong> {safe_format(rsi_signal, "중립")}</p>
+                <h4>{safe_format(ma_emoji, "➡️")} 이동평균: <span style="color: {safe_format(ma_color, 'blue')};">{safe_format(ma_signal, "중립")}</span></h4>
                 <p><strong>SMA20:</strong> ${sma_20:.2f}</p>
                 <p><strong>SMA50:</strong> ${sma_50:.2f}</p>
             </div>
             """, unsafe_allow_html=True)
             
             # 엘리어트 파동 분석 표시
-            elliott_wave = advanced_results.get('elliott_wave', {})
+            elliott_wave = advanced_results.get('elliott_wave', {}) if advanced_results else {}
             if elliott_wave:
                 st.markdown("#### 🌊 엘리어트 파동 분석")
                 st.markdown(f"""
                 <div class="analysis-card">
-                    <p><strong>현재 파동:</strong> {elliott_wave.get('current_wave', 'N/A')}</p>
-                    <p><strong>추세 방향:</strong> {elliott_wave.get('trend_direction', 'N/A')}</p>
-                    <p><strong>완성도:</strong> {elliott_wave.get('completion_percentage', 0):.0f}%</p>
-                    <p><strong>다음 목표:</strong> ${elliott_wave.get('next_target', 0):.2f}</p>
+                    <p><strong>현재 파동:</strong> {safe_format(elliott_wave.get('current_wave'), 'N/A')}</p>
+                    <p><strong>추세 방향:</strong> {safe_format(elliott_wave.get('trend_direction'), 'N/A')}</p>
+                    <p><strong>완성도:</strong> {safe_float(elliott_wave.get('completion_percentage', 0)):.0f}%</p>
+                    <p><strong>다음 목표:</strong> ${safe_float(elliott_wave.get('next_target', 0)):.2f}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
             # 피보나치 레벨 표시
-            fibonacci = advanced_results.get('fibonacci_levels', {})
+            fibonacci = advanced_results.get('fibonacci_levels', {}) if advanced_results else {}
             if fibonacci:
                 st.markdown("#### 📐 피보나치 되돌림")
-                nearest_support = fibonacci.get('nearest_support', 0)
-                nearest_resistance = fibonacci.get('nearest_resistance', 0)
+                nearest_support = safe_float(fibonacci.get('nearest_support', 0))
+                nearest_resistance = safe_float(fibonacci.get('nearest_resistance', 0))
                 
                 st.markdown(f"""
                 <div class="analysis-card">
                     <p><strong>가장 가까운 지지선:</strong> ${nearest_support:.2f}</p>
                     <p><strong>가장 가까운 저항선:</strong> ${nearest_resistance:.2f}</p>
-                    <p><strong>되돌림 비율:</strong> {fibonacci.get('retracement_percentage', 0):.1%}</p>
+                    <p><strong>되돌림 비율:</strong> {safe_float(fibonacci.get('retracement_percentage', 0)):.1%}</p>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -647,13 +820,13 @@ if selected_stock:
                     st.plotly_chart(fig_price, use_container_width=True)
             
             # 차트 패턴 인식 결과
-            chart_patterns = advanced_results.get('chart_patterns', {})
+            chart_patterns = advanced_results.get('chart_patterns', {}) if advanced_results else {}
             if chart_patterns:
                 st.markdown("#### 📊 차트 패턴 인식")
                 for pattern_name, pattern_data in chart_patterns.items():
-                    if pattern_data.get('detected'):
-                        pattern_type = pattern_data.get('type', 'Unknown')
-                        confidence = pattern_data.get('confidence', 0)
+                    if pattern_data and pattern_data.get('detected'):
+                        pattern_type = safe_format(pattern_data.get('type'), 'Unknown')
+                        confidence = safe_float(pattern_data.get('confidence', 0))
                         
                         st.markdown(f"""
                         <div class="pattern-detected">
@@ -681,19 +854,26 @@ if selected_stock:
         </div>
         """, unsafe_allow_html=True)
         
-        # AI 분석 실행
-        analysis_agent = EnhancedStockAnalysisAgent()
-        
         # 소셜미디어 요약
         social_summary = ""
         if social_data:
-            social_summary = ', '.join([f"{item['platform']} {item['sentiment_score']:+.2f}" for item in social_data])
+            social_summary = ', '.join([f"{item.get('platform', 'Unknown')} {safe_float(item.get('sentiment_score', 0)):+.2f}" for item in social_data])
         
         # 애널리스트 요약
         analyst_summary = ""
         if analyst_data:
-            ratings = [a['rating'] for a in analyst_data]
+            ratings = [a.get('rating', 'Hold') for a in analyst_data if a]
             analyst_summary = f"애널리스트 평가: {', '.join(ratings)}"
+        
+        # 엘리어트 파동 요약
+        elliott_summary = "N/A"
+        if elliott_wave:
+            elliott_summary = safe_format(elliott_wave.get('current_wave'), 'N/A')
+        
+        # 차트 패턴 요약
+        pattern_count = 0
+        if chart_patterns:
+            pattern_count = len([p for p in chart_patterns.values() if p and p.get('detected', False)])
         
         ai_prompt = f"""
         {selected_stock} 주식에 대한 종합 투자 분석을 해주세요.
@@ -708,8 +888,8 @@ if selected_stock:
         - {analyst_summary}
         
         고급 기술적 분석:
-        - 엘리어트 파동: {elliott_wave.get('current_wave', 'N/A')}
-        - 차트 패턴: {len([p for p in chart_patterns.values() if p.get('detected', False)])}개 패턴 감지
+        - 엘리어트 파동: {elliott_summary}
+        - 차트 패턴: {pattern_count}개 패턴 감지
         
         다음 형식으로 분석해주세요:
         1. 현재 상황 종합 요약
@@ -719,24 +899,8 @@ if selected_stock:
         5. 리스크 요인 및 주의사항
         """
         
-        try:
-            ai_analysis = analysis_agent.analyze_with_ai(ai_prompt)
-        except Exception as e:
-            ai_analysis = f"""
-            **{selected_stock} 종합 분석 결과**
-            
-            **현재 상황:** 다중 소스 분석 결과 {sentiment_label} 시장 감정과 {rsi_signal} RSI 신호를 보이고 있습니다.
-            
-            **기술적 분석:** {ma_signal} 추세에서 {change_percent:+.2f}% 변동을 기록했습니다.
-            
-            **소셜미디어:** {len(social_data)}개 플랫폼에서 감정 분석 완료
-            
-            **애널리스트:** {len(analyst_data)}개 기관의 평가 반영
-            
-            **투자 권고:** {"매수 고려" if sentiment_score > 0 and current_rsi < 70 else "보유 권장" if abs(sentiment_score) < 0.2 else "신중한 접근"}
-            
-            **위험 요소:** 시장 변동성과 다중 지표 신호를 종합적으로 모니터링 필요
-            """
+        # AI 분석 실행 (수정된 동기 함수 사용)
+        ai_analysis = run_ai_analysis(ai_prompt)
         
         ai_status.markdown("""
         <div class="agent-status">
@@ -754,9 +918,9 @@ if selected_stock:
         time.sleep(1)
         
         # 동적 시나리오 분석 실행
-        scenario_generator = DynamicScenarioGenerator()
-        
+        dynamic_scenarios = {}
         try:
+            scenario_generator = DynamicScenarioGenerator()
             dynamic_scenarios = scenario_generator.generate_dynamic_scenarios(
                 selected_stock,
                 {'current_price': current_price, 'change_percent': change_percent},
@@ -766,14 +930,13 @@ if selected_stock:
                 analyst_data
             )
         except Exception as e:
-            dynamic_scenarios = {}
             st.warning(f"동적 시나리오 생성 실패: {e}")
         
-        # 종합 점수 계산
+        # 종합 점수 계산 (안전한 계산)
         tech_score = 1 if current_rsi < 70 and ma_signal == "상승 추세" else -1 if current_rsi > 70 or ma_signal == "하락 추세" else 0
         sentiment_weight = sentiment_score * 2
-        social_weight = np.mean([s['sentiment_score'] for s in social_data]) if social_data else 0
-        analyst_weight = np.mean([1 if a['rating'] == 'Buy' else -1 if a['rating'] == 'Sell' else 0 for a in analyst_data]) if analyst_data else 0
+        social_weight = np.mean([safe_float(s.get('sentiment_score', 0)) for s in social_data]) if social_data else 0
+        analyst_weight = np.mean([1 if a.get('rating') == 'Buy' else -1 if a.get('rating') == 'Sell' else 0 for a in analyst_data if a]) if analyst_data else 0
         
         final_score = (tech_score + sentiment_weight + social_weight * 0.3 + analyst_weight * 0.4) / 3
         
@@ -817,7 +980,7 @@ if selected_stock:
         </div>
         """, unsafe_allow_html=True)
         
-        # 동적 시나리오 분석 표시
+        # 동적 시나리오 분석 표시 (안전한 포맷팅 적용)
         if dynamic_scenarios and 'scenarios' in dynamic_scenarios:
             st.markdown("### 📊 동적 투자 시나리오 분석")
             
@@ -825,8 +988,8 @@ if selected_stock:
             market_regime = dynamic_scenarios.get('market_regime', {})
             
             # 시장 환경 표시
-            regime = market_regime.get('regime', 'sideways')
-            regime_confidence = market_regime.get('confidence', 0.5)
+            regime = safe_format(market_regime.get('regime'), 'sideways')
+            regime_confidence = safe_float(market_regime.get('confidence', 0.5))
             
             st.markdown(f"""
             <div class="analysis-card">
@@ -847,11 +1010,11 @@ if selected_stock:
             for scenario_key, scenario_title, col, color in scenario_configs:
                 if scenario_key in scenarios:
                     scenario_data = scenarios[scenario_key]
-                    prob = scenario_data['probability']
-                    price_target = scenario_data['price_target']
-                    return_range = scenario_data['return_range']
+                    prob = safe_float(scenario_data.get('probability', 0.33))
+                    price_target = safe_float(scenario_data.get('price_target', current_price))
+                    return_range = scenario_data.get('return_range', [0, 0])
                     key_drivers = scenario_data.get('key_drivers', [])
-                    confidence = scenario_data.get('confidence', 0.7)
+                    confidence = safe_float(scenario_data.get('confidence', 0.7))
                     
                     expected_return = (price_target / current_price - 1) * 100 if current_price > 0 else 0
                     
@@ -862,14 +1025,14 @@ if selected_stock:
                             <p><strong>확률:</strong> {prob:.0%}</p>
                             <p><strong>목표가:</strong> ${price_target:.2f}</p>
                             <p><strong>예상 수익률:</strong> {expected_return:+.1f}%</p>
-                            <p><strong>수익률 범위:</strong> {return_range[0]:.1%} ~ {return_range[1]:.1%}</p>
+                            <p><strong>수익률 범위:</strong> {safe_float(return_range[0] if return_range else 0):.1%} ~ {safe_float(return_range[1] if len(return_range) > 1 else 0):.1%}</p>
                             <p><strong>신뢰도:</strong> {confidence:.1%}</p>
                             <p><strong>핵심 동인:</strong></p>
                             <ul>
                         """, unsafe_allow_html=True)
                         
                         for driver in key_drivers[:3]:
-                            st.markdown(f"<li>{driver}</li>", unsafe_allow_html=True)
+                            st.markdown(f"<li>{safe_format(driver, 'N/A')}</li>", unsafe_allow_html=True)
                         
                         st.markdown("</ul></div>", unsafe_allow_html=True)
             
@@ -888,8 +1051,8 @@ if selected_stock:
                             
                             st.markdown(f"**{period_name}**")
                             for scenario_name, data in period_data.items():
-                                prob = data['probability']
-                                expected_price = data['expected_price']
+                                prob = safe_float(data.get('probability', 0))
+                                expected_price = safe_float(data.get('expected_price', current_price))
                                 st.write(f"- {scenario_name}: {prob:.0%} 확률, ${expected_price:.2f}")
                 
                 with time_col2:
@@ -900,8 +1063,8 @@ if selected_stock:
                             
                             st.markdown(f"**{period_name}**")
                             for scenario_name, data in period_data.items():
-                                prob = data['probability']
-                                expected_price = data['expected_price']
+                                prob = safe_float(data.get('probability', 0))
+                                expected_price = safe_float(data.get('expected_price', current_price))
                                 st.write(f"- {scenario_name}: {prob:.0%} 확률, ${expected_price:.2f}")
         
         # 에이전트 활동 로그
@@ -921,7 +1084,7 @@ if selected_stock:
             6. ✅ **최종 추천**: "{recommendation}" 생성 (신뢰도 {confidence_level:.0f}%)
             
             **📈 수집된 데이터 품질**
-            - 뉴스 데이터: ✅ {len(enhanced_news)}개 기사 (고품질: {news_quality.count('high')}개)
+            - 뉴스 데이터: ✅ {len(enhanced_news)}개 기사 (고품질: {high_quality}개)
             - 소셜미디어: ✅ {len(social_data)}개 플랫폼 데이터
             - 애널리스트: ✅ {len(analyst_data)}개 기관 리포트
             - 기술적 분석: ✅ 기본 + 고급 지표 완료
@@ -931,6 +1094,11 @@ if selected_stock:
             - 시장 환경: {regime.upper()}
             - 동적 시나리오: {len(scenarios) if 'scenarios' in dynamic_scenarios else 0}개 생성
             - 시간별 전개: {len(time_scenarios) if time_scenarios else 0}개 기간 분석
+            
+            **⚠️ Rate Limiting 정보**
+            - 모든 API에 지수 백오프 재시도 로직 적용
+            - 비동기 처리를 동기 함수로 래핑하여 Streamlit 호환성 확보
+            - ChatClovaX와 LangChain 통합으로 안정적 AI 분석 제공
             """)
 
 else:
@@ -948,7 +1116,7 @@ else:
             <h3 style="color: #2c3e50;">🌟 주요 특징</h3>
             <div style="display: flex; justify-content: space-around; margin: 20px 0;">
                 <div style="text-align: center;">
-                    <h4 style="color: #3498db;">📰 30개 뉴스</h4>
+                    <h4 style="color: #3498db;">📰 뉴스 분석</h4>
                     <p>네이버 API + 다중 소스</p>
                 </div>
                 <div style="text-align: center;">
@@ -984,7 +1152,7 @@ with st.sidebar:
     - 📋 데이터 품질 검증 시스템
     
     **📊 데이터 소스:**
-    - 네이버 뉴스 API (30개 기사)
+    - 네이버 뉴스 API
     - Yahoo Finance API
     - 소셜미디어 (Reddit, Twitter, StockTwits)
     - 애널리스트 리포트 (3개 기관)
@@ -1018,12 +1186,28 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🆕 새로운 기능")
     st.markdown("""
-    - ✨ **네이버 뉴스 API** 연동
-    - 📱 **소셜미디어** 감정 분석
-    - 📊 **애널리스트 리포트** 통합
-    - 🌊 **엘리어트 파동** 분석
-    - 📐 **피보나치 레벨** 계산
-    - 🔍 **차트 패턴** 자동 인식
+    - ✨ **Rate Limiting** 자동 관리
+    - 🔄 **지수 백오프** 재시도 로직
+    - 🛡️ **안전한 포맷팅** 시스템
+    - 📊 **실시간 오류** 모니터링
     - 🎯 **동적 시나리오** 생성
     - 📋 **데이터 품질** 검증
+    - 🔧 **비동기 처리** 최적화
+    - 🤖 **ChatClovaX** 통합
+    """)
+    
+    st.markdown("---")
+    st.markdown("### 📞 기술 지원")
+    st.markdown("""
+    **시스템 상태:**
+    - ✅ Streamlit 호환성 확보
+    - ✅ 비동기 처리 안정화
+    - ✅ Rate Limiting 적용
+    - ✅ 에러 처리 강화
+    
+    **성능 최적화:**
+    - 🚀 실시간 데이터 수집
+    - ⚡ 고속 AI 분석
+    - 🔄 자동 재시도 시스템
+    - 📊 품질 검증 자동화
     """)

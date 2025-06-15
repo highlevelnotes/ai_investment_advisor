@@ -11,10 +11,10 @@ warnings.filterwarnings('ignore')
 
 # 새로운 모듈들 import
 from old_ver_2.enhanced_sentiment_analyzer import EnhancedSentimentAnalyzer
-from advanced_scenario_analyzer import AdvancedScenarioAnalyzer
+from old_ver_2.advanced_scenario_analyzer import AdvancedScenarioAnalyzer
 from old_ver_2.technical_analysis_engine import TechnicalAnalysisEngine
 from old_ver_2.data_quality_validator import DataQualityValidator
-from naver_news_collector import NaverNewsCollector
+from old_ver_2.naver_news_collector import NaverNewsCollector
 
 # HyperCLOVA X 클라이언트
 from langchain_naver import ChatClovaX

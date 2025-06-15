@@ -53,7 +53,7 @@ class EnhancedSentimentAnalyzer:
         base_sentiment = await base_analyzer.analyze_stock_sentiment(ticker)
         
         # 네이버 뉴스 추가 분석
-        from naver_news_collector import NaverNewsCollector
+        from old_ver_2.naver_news_collector import NaverNewsCollector
         naver_collector = NaverNewsCollector()
         naver_news = await naver_collector.collect_enhanced_news(ticker, count=30)
         
