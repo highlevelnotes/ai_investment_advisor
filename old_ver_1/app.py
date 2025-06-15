@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 import logging
 
-from old_ver_1.workflow import InvestmentWorkflow
+from workflow import InvestmentWorkflow
 from agents.aimodels import UserProfile
 from agents.personalization_agent import PersonalizationAgent
 

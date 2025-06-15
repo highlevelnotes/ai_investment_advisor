@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 import logging
 from langchain_naver import ChatClovaX
 from langchain_core.messages import HumanMessage, SystemMessage
-from old_ver_2.news_collector import NewsCollector
+from news_collector import NewsCollector
 from dotenv import load_dotenv
 
 load_dotenv()
