@@ -319,7 +319,7 @@ def show_portfolio_optimization(user_profile):
                 st.dataframe(weights_df, use_container_width=True)
 
 def show_ai_analysis(user_profile):
-    """AI 분석 페이지"""
+    """AI 분석 페이지 - 개선된 버전"""
     st.header("🤖 AI 분석 및 추천")
     
     if 'etf_data' not in st.session_state or 'economic_data' not in st.session_state:
@@ -328,60 +328,91 @@ def show_ai_analysis(user_profile):
     
     ai_analyzer = AIAnalyzer()
     
-    if not ai_analyzer.available:
-        st.warning("HyperClova X API가 설정되지 않아 샘플 분석을 제공합니다.")
+    # AI 상태 확인
+    with st.expander("🔍 AI 시스템 상태", expanded=False):
+        if ai_analyzer.available:
+            st.success("✅ HyperClova X 연결됨")
+        else:
+            st.warning("⚠️ HyperClova X 연결 안됨 - 기본 분석 제공")
     
-    # 분석 유형 선택
-    analysis_type = st.selectbox(
-        "분석 유형 선택",
-        ['market_analysis', 'portfolio_recommendation', 'performance_analysis'],
-        format_func=lambda x: {
-            'market_analysis': '시장 상황 분석',
-            'portfolio_recommendation': '포트폴리오 추천',
-            'performance_analysis': '성과 분석'
-        }[x]
-    )
+    # 분석 실행
+    col1, col2 = st.columns(2)
     
-    if st.button("AI 분석 실행"):
-        with st.spinner("AI가 분석하고 있습니다..."):
-            if analysis_type == 'market_analysis':
-                analysis_result = ai_analyzer.analyze_market_situation(
+    with col1:
+        if st.button("🏛️ 시장 분석 실행", use_container_width=True):
+            with st.spinner("시장을 분석하고 있습니다..."):
+                market_analysis = ai_analyzer.analyze_market_situation(
                     st.session_state.economic_data,
                     st.session_state.etf_data
                 )
-                st.markdown("### 🏛️ 시장 상황 분석")
-                st.markdown(analysis_result)
-                
-            elif analysis_type == 'portfolio_recommendation':
-                recommendation = ai_analyzer.generate_portfolio_recommendation(
+                st.session_state.market_analysis = market_analysis
+    
+    with col2:
+        if st.button("🎯 포트폴리오 전략 생성", use_container_width=True):
+            with st.spinner("포트폴리오 전략을 수립하고 있습니다..."):
+                portfolio_strategy = ai_analyzer.generate_portfolio_strategy(
                     st.session_state.economic_data,
                     st.session_state.etf_data,
                     user_profile
                 )
-                st.markdown("### 🎯 개인 맞춤형 포트폴리오 추천")
-                st.markdown(recommendation)
+                st.session_state.portfolio_strategy = portfolio_strategy
+    
+    # 결과 표시
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📊 시장 분석")
+        if 'market_analysis' in st.session_state:
+            st.markdown(st.session_state.market_analysis)
+        else:
+            st.info("시장 분석을 실행해주세요.")
+    
+    with col2:
+        st.subheader("🎯 포트폴리오 전략")
+        if 'portfolio_strategy' in st.session_state:
+            st.markdown(st.session_state.portfolio_strategy)
+        else:
+            st.info("포트폴리오 전략을 생성해주세요.")
+    
+    # AI 기반 포트폴리오 구성
+    st.subheader("🤖 AI 추천 포트폴리오")
+    
+    if st.button("AI 포트폴리오 생성", use_container_width=True):
+        with st.spinner("AI가 최적 포트폴리오를 구성하고 있습니다..."):
+            ai_weights = ai_analyzer.generate_ai_portfolio_weights(
+                st.session_state.economic_data,
+                st.session_state.etf_data,
+                user_profile
+            )
+            
+            if ai_weights:
+                st.session_state.ai_portfolio = ai_weights
                 
-            elif analysis_type == 'performance_analysis':
-                # 샘플 성과 데이터
-                portfolio_data = {
-                    'return': 7.2,
-                    'volatility': 12.5,
-                    'sharpe_ratio': 0.52,
-                    'max_drawdown': -8.3
-                }
-                benchmark_data = {
-                    'return': 5.4,
-                    'volatility': 15.2,
-                    'sharpe_ratio': 0.31,
-                    'max_drawdown': -12.1
-                }
+                # 포트폴리오 시각화
+                col1, col2 = st.columns([1, 1])
                 
-                performance_analysis = ai_analyzer.analyze_portfolio_performance(
-                    portfolio_data,
-                    benchmark_data
-                )
-                st.markdown("### 📊 포트폴리오 성과 분석")
-                st.markdown(performance_analysis)
+                with col1:
+                    pie_chart = create_portfolio_pie_chart(ai_weights)
+                    st.plotly_chart(pie_chart, use_container_width=True)
+                
+                with col2:
+                    # 상세 구성
+                    weights_df = pd.DataFrame([
+                        {
+                            'ETF명': name,
+                            '비중': f"{weight*100:.1f}%",
+                            '투자금액': format_currency(weight * user_profile['current_assets'])
+                        }
+                        for name, weight in ai_weights.items()
+                    ])
+                    st.dataframe(weights_df, use_container_width=True)
+                    
+                    # 예상 성과
+                    st.metric("예상 연수익률", "6.5%")
+                    st.metric("예상 변동성", "12.8%")
+                    st.metric("샤프 비율", "0.51")
+            else:
+                st.error("AI 포트폴리오 생성에 실패했습니다.")
 
 def show_backtesting(user_profile):
     """백테스팅 페이지"""

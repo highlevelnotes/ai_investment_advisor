@@ -445,3 +445,67 @@ class PortfolioOptimizer:
             })
         
         return pd.DataFrame(results)
+
+    # portfolio_optimizer.py에 AI 기반 최적화 추가
+    def optimize_portfolio(self, returns_data, method='max_sharpe', user_profile=None, ai_analyzer=None, macro_data=None):
+        """포트폴리오 최적화"""
+        returns_df = self._prepare_returns_data(returns_data)
+        
+        if returns_df.empty:
+            return self._get_equal_weight_portfolio(returns_data)
+        
+        if method == 'ai_based' and ai_analyzer:
+            return self._ai_based_optimization(returns_df, user_profile, ai_analyzer, macro_data, returns_data)
+        elif method == 'min_variance':
+            return self._minimize_variance(returns_df)
+        elif method == 'max_sharpe':
+            return self._maximize_sharpe_ratio(returns_df)
+        elif method == 'lifecycle' and user_profile:
+            return self._lifecycle_allocation(returns_df, user_profile)
+        else:
+            return self._get_equal_weight_portfolio(returns_data)
+
+    def _ai_based_optimization(self, returns_df, user_profile, ai_analyzer, macro_data, etf_data):
+        """AI 기반 포트폴리오 최적화"""
+        try:
+            # AI가 가중치 생성
+            ai_weights = ai_analyzer.generate_ai_portfolio_weights(macro_data, etf_data, user_profile)
+            
+            if not ai_weights:
+                print("AI 가중치 생성 실패, 기본 최적화 사용")
+                return self._maximize_sharpe_ratio(returns_df)
+            
+            # 실제 ETF와 매칭
+            matched_weights = {}
+            for etf_name, weight in ai_weights.items():
+                if etf_name in returns_df.columns:
+                    matched_weights[etf_name] = weight
+            
+            if not matched_weights:
+                return self._maximize_sharpe_ratio(returns_df)
+            
+            # 가중치 정규화
+            total_weight = sum(matched_weights.values())
+            if total_weight > 0:
+                matched_weights = {k: v/total_weight for k, v in matched_weights.items()}
+            
+            # 성과 지표 계산
+            weight_array = np.array([matched_weights.get(col, 0) for col in returns_df.columns])
+            expected_returns = returns_df.mean() * 252
+            cov_matrix = returns_df.cov() * 252
+            
+            portfolio_return = np.sum(expected_returns * weight_array)
+            portfolio_vol = np.sqrt(np.dot(weight_array.T, np.dot(cov_matrix, weight_array)))
+            sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_vol if portfolio_vol > 0 else 0
+            
+            return {
+                'weights': matched_weights,
+                'expected_return': portfolio_return,
+                'volatility': portfolio_vol,
+                'sharpe_ratio': sharpe_ratio,
+                'method': 'ai_based'
+            }
+            
+        except Exception as e:
+            print(f"AI 최적화 실패: {e}")
+            return self._maximize_sharpe_ratio(returns_df)
