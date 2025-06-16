@@ -12,11 +12,7 @@ from data_collector import DataCollector
 from ai_analyzer import AIAnalyzer
 from portfolio_optimizer import PortfolioOptimizer
 from visualization import create_portfolio_pie_chart, create_performance_chart
-from utils import calculate_portfolio_metrics, format_currency
-
-from dotenv import load_dotenv
-
-load_dotenv()
+from utils import calculate_portfolio_performance, format_currency
 
 # 페이지 설정
 st.set_page_config(
@@ -33,6 +29,16 @@ def main():
     # 헤더
     st.title(APP_CONFIG['TITLE'])
     st.markdown(f"*{APP_CONFIG['DESCRIPTION']}*")
+    
+    # 프로젝트 목적 설명
+    st.info("""
+    🇰🇷 **AI 기반 국내 ETF 퇴직연금 포트폴리오 관리 시스템**
+    
+    HyperClova X AI가 매크로 경제 상황을 실시간 분석하여 개인 맞춤형 포트폴리오를 제공합니다.
+    순수 국내 ETF만을 활용하여 국내 자본시장 활성화에 기여합니다.
+    
+    ✅ AI 기반 시장 분석  ✅ 개인 맞춤 포트폴리오  ✅ 실시간 성과 계산  ✅ 국내 ETF 특화
+    """)
     
     # API 상태 표시
     with st.expander("🔧 시스템 상태", expanded=False):
@@ -84,400 +90,164 @@ def main():
             st.session_state.economic_data = data_collector.get_economic_indicators()
             st.session_state.market_data = data_collector.get_market_data()
     
-    # 탭 구성
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 대시보드", 
-        "📈 시장 분석", 
-        "⚖️ 포트폴리오 최적화", 
-        "🤖 AI 분석", 
-        "📋 백테스팅"
-    ])
+    # 메인 AI 분석 및 포트폴리오 생성
+    st.header("🤖 AI 기반 종합 분석 및 포트폴리오 최적화")
     
-    with tab1:
-        show_dashboard(user_profile)
-    
-    with tab2:
-        show_market_analysis()
-    
-    with tab3:
-        show_portfolio_optimization(user_profile)
-    
-    with tab4:
-        show_ai_analysis(user_profile)
-    
-    with tab5:
-        show_backtesting(user_profile)
-
-def show_dashboard(user_profile):
-    """대시보드 페이지"""
-    st.header("📊 포트폴리오 대시보드")
-    
-    # 프로젝트 목적 설명 추가
-    st.info("""
-    🇰🇷 **국내 자본시장 활성화 프로젝트**
-    
-    이 시스템은 퇴직연금 자금이 국내에서 순환되어 우리나라 경제 성장에 기여할 수 있도록 
-    **순수 국내 ETF만**을 활용한 포트폴리오를 제공합니다.
-    
-    ✅ 환율 리스크 제거  ✅ 세제 혜택 활용  ✅ 국내 경제 기여  ✅ 정보 접근성 향상
-    """)
-
-    # 시장 현황
-    if 'market_data' in st.session_state:
-        market_data = st.session_state.market_data
+    # AI 분석 실행
+    if st.button("🚀 AI 종합 분석 및 포트폴리오 생성", type="primary", use_container_width=True):
+        ai_analyzer = AIAnalyzer()
         
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            kospi_change_color = "green" if market_data['kospi']['change'] >= 0 else "red"
-            st.metric(
-                "KOSPI",
-                f"{market_data['kospi']['current']:.2f}",
-                f"{market_data['kospi']['change']:+.2f} ({market_data['kospi']['change_pct']:+.2f}%)"
-            )
-        
-        with col2:
-            kosdaq_change_color = "green" if market_data['kosdaq']['change'] >= 0 else "red"
-            st.metric(
-                "KOSDAQ",
-                f"{market_data['kosdaq']['current']:.2f}",
-                f"{market_data['kosdaq']['change']:+.2f} ({market_data['kosdaq']['change_pct']:+.2f}%)"
-            )
-        
-        with col3:
-            st.metric(
-                "상장 ETF 수",
-                f"{market_data['etf_count']}개",
-                "PyKRX 기반"
-            )
-    
-    # 사용자 포트폴리오 요약
-    st.subheader("💼 내 포트폴리오 현황")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.metric("현재 자산", format_currency(user_profile['current_assets']))
-        st.metric("월 납입액", format_currency(user_profile['monthly_contribution']))
-        st.metric("투자기간", f"{user_profile['investment_period']}년")
-    
-    with col2:
-        st.metric("투자성향", user_profile['risk_tolerance'])
-        st.metric("나이", f"{user_profile['age']}세")
-        
-        # 예상 은퇴 자산 계산
-        expected_assets = calculate_expected_retirement_assets(user_profile)
-        st.metric("예상 은퇴자산", format_currency(expected_assets))
-
-def show_market_analysis():
-    """시장 분석 페이지"""
-    st.header("📈 시장 분석")
-    
-    if 'etf_data' not in st.session_state:
-        st.warning("데이터를 먼저 로드해주세요.")
-        return
-    
-    etf_data = st.session_state.etf_data
-    
-    # ETF 성과 차트
-    st.subheader("📊 ETF 성과 비교")
-    performance_chart = create_performance_chart(etf_data)
-    st.plotly_chart(performance_chart, use_container_width=True)
-    
-    # 카테고리별 요약
-    st.subheader("📋 카테고리별 현황")
-    
-    for category, etfs in etf_data.items():
-        with st.expander(f"{category} ({len(etfs)}개 ETF)"):
-            etf_summary = []
-            
-            for name, data in etfs.items():
-                if 'returns' in data and not data['returns'].empty:
-                    annual_return = data['returns'].mean() * 252 * 100
-                    annual_vol = data['returns'].std() * np.sqrt(252) * 100
-                else:
-                    annual_return = 0
-                    annual_vol = 0
-                
-                etf_summary.append({
-                    'ETF명': name,
-                    '현재가': f"{data['price']:,.0f}원",
-                    '연환산수익률': f"{annual_return:.2f}%",
-                    '변동성': f"{annual_vol:.2f}%",
-                    '거래량': f"{data['volume']:,}주"
-                })
-            
-            summary_df = pd.DataFrame(etf_summary)
-            st.dataframe(summary_df, use_container_width=True)
-
-def show_portfolio_optimization(user_profile):
-    """포트폴리오 최적화 페이지"""
-    st.header("⚖️ AI 기반 포트폴리오 최적화")
-    
-    if 'etf_data' not in st.session_state:
-        st.warning("데이터를 먼저 로드해주세요.")
-        return
-    
-    optimizer = PortfolioOptimizer()
-    ai_analyzer = AIAnalyzer()
-    etf_data = st.session_state.etf_data
-    
-    # 최적화 방법 선택
-    optimization_method = st.selectbox(
-        "최적화 방법 선택",
-        ['ai_based', 'lifecycle', 'max_sharpe', 'min_variance'],
-        format_func=lambda x: {
-            'ai_based': '🤖 AI 기반 시장분석 최적화',
-            'lifecycle': '📅 생애주기별 배분',
-            'max_sharpe': '📈 최대 샤프비율',
-            'min_variance': '🛡️ 최소분산'
-        }[x]
-    )
-    
-    # AI 기반 최적화 설명
-    if optimization_method == 'ai_based':
-        st.info("""
-        🤖 **AI 기반 시장분석 최적화**
-        
-        HyperClova X가 현재 경제지표와 ETF 성과를 실시간 분석하여:
-        - 매크로 경제 상황에 맞는 자산배분 결정
-        - 개별 ETF의 성과와 전망을 고려한 종목 선택
-        - 시장 변화에 따른 동적 포트폴리오 구성
-        
-        기존 정적 배분과 달리 **시장 상황을 실시간 반영**합니다.
-        """)
-    
-    if st.button("포트폴리오 최적화 실행"):
-        with st.spinner("AI가 시장을 분석하고 최적화를 수행하고 있습니다..."):
-            if optimization_method == 'ai_based':
-                optimal_portfolio = optimizer.optimize_portfolio(
-                    etf_data, 
-                    method=optimization_method,
-                    user_profile=user_profile,
-                    ai_analyzer=ai_analyzer,
-                    macro_data=st.session_state.get('economic_data', {})
-                )
-            else:
-                optimal_portfolio = optimizer.optimize_portfolio(
-                    etf_data, 
-                    method=optimization_method,
-                    user_profile=user_profile
-                )
-            
-            if optimal_portfolio:
-                st.session_state.optimal_portfolio = optimal_portfolio
-                
-                # AI 기반 결과 표시
-                if optimization_method == 'ai_based':
-                    st.success("🤖 AI 분석 완료!")
-                    
-                    # AI 분석 결과 표시
-                    with st.expander("🧠 AI 분석 상세 결과", expanded=True):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader("📊 시장 분석")
-                            st.write("**시장 전망:**")
-                            st.write(optimal_portfolio.get('market_outlook', ''))
-                            
-                            st.write("**리스크 평가:**")
-                            st.write(optimal_portfolio.get('risk_assessment', ''))
-                        
-                        with col2:
-                            st.subheader("🎯 포트폴리오 전략")
-                            st.write("**AI 추천 근거:**")
-                            st.write(optimal_portfolio.get('ai_reasoning', ''))
-                            
-                            st.write("**리밸런싱 신호:**")
-                            for trigger in optimal_portfolio.get('rebalancing_trigger', []):
-                                st.write(f"• {trigger}")
-                
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    st.subheader("📊 최적 포트폴리오 구성")
-                    pie_chart = create_portfolio_pie_chart(optimal_portfolio['weights'])
-                    st.plotly_chart(pie_chart, use_container_width=True)
-                
-                with col2:
-                    st.subheader("📈 예상 성과")
-                    st.metric("기대수익률", f"{optimal_portfolio['expected_return']*100:.2f}%")
-                    st.metric("변동성", f"{optimal_portfolio['volatility']*100:.2f}%")
-                    st.metric("샤프비율", f"{optimal_portfolio['sharpe_ratio']:.3f}")
-                    st.metric("최적화 방법", optimal_portfolio['method'])
-                
-                # 상세 구성
-                st.subheader("📋 상세 구성")
-                weights_df = pd.DataFrame([
-                    {
-                        'ETF명': name, 
-                        '비중': f"{weight*100:.2f}%", 
-                        '투자금액': format_currency(weight * user_profile['current_assets'])
-                    }
-                    for name, weight in optimal_portfolio['weights'].items()
-                ])
-                st.dataframe(weights_df, use_container_width=True)
-
-def show_ai_analysis(user_profile):
-    """AI 분석 페이지 - 개선된 버전"""
-    st.header("🤖 AI 분석 및 추천")
-    
-    if 'etf_data' not in st.session_state or 'economic_data' not in st.session_state:
-        st.warning("데이터를 먼저 로드해주세요.")
-        return
-    
-    ai_analyzer = AIAnalyzer()
-    
-    # AI 상태 확인
-    with st.expander("🔍 AI 시스템 상태", expanded=False):
-        if ai_analyzer.available:
-            st.success("✅ HyperClova X 연결됨")
-        else:
-            st.warning("⚠️ HyperClova X 연결 안됨 - 기본 분석 제공")
-    
-    # 분석 실행
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🏛️ 시장 분석 실행", use_container_width=True):
-            with st.spinner("시장을 분석하고 있습니다..."):
-                market_analysis = ai_analyzer.analyze_market_situation(
-                    st.session_state.economic_data,
-                    st.session_state.etf_data
-                )
-                st.session_state.market_analysis = market_analysis
-    
-    with col2:
-        if st.button("🎯 포트폴리오 전략 생성", use_container_width=True):
-            with st.spinner("포트폴리오 전략을 수립하고 있습니다..."):
-                portfolio_strategy = ai_analyzer.generate_portfolio_strategy(
-                    st.session_state.economic_data,
-                    st.session_state.etf_data,
-                    user_profile
-                )
-                st.session_state.portfolio_strategy = portfolio_strategy
-    
-    # 결과 표시
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 시장 분석")
-        if 'market_analysis' in st.session_state:
-            st.markdown(st.session_state.market_analysis)
-        else:
-            st.info("시장 분석을 실행해주세요.")
-    
-    with col2:
-        st.subheader("🎯 포트폴리오 전략")
-        if 'portfolio_strategy' in st.session_state:
-            st.markdown(st.session_state.portfolio_strategy)
-        else:
-            st.info("포트폴리오 전략을 생성해주세요.")
-    
-    # AI 기반 포트폴리오 구성
-    st.subheader("🤖 AI 추천 포트폴리오")
-    
-    if st.button("AI 포트폴리오 생성", use_container_width=True):
-        with st.spinner("AI가 최적 포트폴리오를 구성하고 있습니다..."):
-            ai_weights = ai_analyzer.generate_ai_portfolio_weights(
-                st.session_state.economic_data,
-                st.session_state.etf_data,
+        with st.spinner("AI가 시장을 분석하고 최적 포트폴리오를 구성하고 있습니다..."):
+            # 종합 분석 실행
+            comprehensive_result = ai_analyzer.comprehensive_market_analysis(
+                st.session_state.get('economic_data', {}),
+                st.session_state.get('etf_data', {}),
                 user_profile
             )
             
-            if ai_weights:
-                st.session_state.ai_portfolio = ai_weights
+            if comprehensive_result:
+                st.session_state.ai_analysis_result = comprehensive_result
                 
-                # 포트폴리오 시각화
-                col1, col2 = st.columns([1, 1])
+                # 결과 표시
+                analysis = comprehensive_result['analysis']
+                portfolio = comprehensive_result['portfolio']
                 
-                with col1:
-                    pie_chart = create_portfolio_pie_chart(ai_weights)
-                    st.plotly_chart(pie_chart, use_container_width=True)
+                # 1. 시장 분석 결과
+                st.subheader("📊 AI 시장 분석")
                 
-                with col2:
-                    # 상세 구성
-                    weights_df = pd.DataFrame([
-                        {
-                            'ETF명': name,
-                            '비중': f"{weight*100:.1f}%",
-                            '투자금액': format_currency(weight * user_profile['current_assets'])
-                        }
-                        for name, weight in ai_weights.items()
-                    ])
-                    st.dataframe(weights_df, use_container_width=True)
-                    
-                    # 예상 성과
-                    st.metric("예상 연수익률", "6.5%")
-                    st.metric("예상 변동성", "12.8%")
-                    st.metric("샤프 비율", "0.51")
-            else:
-                st.error("AI 포트폴리오 생성에 실패했습니다.")
-
-def show_backtesting(user_profile):
-    """백테스팅 페이지"""
-    st.header("📋 백테스팅 및 시뮬레이션")
-    
-    if 'etf_data' not in st.session_state:
-        st.warning("데이터를 먼저 로드해주세요.")
-        return
-    
-    st.subheader("⚙️ 백테스팅 설정")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        backtest_period = st.selectbox(
-            "백테스팅 기간",
-            ['1y', '3y', '5y'],
-            format_func=lambda x: {'1y': '1년', '3y': '3년', '5y': '5년'}[x]
-        )
-        
-        rebalancing_freq = st.selectbox(
-            "리밸런싱 주기",
-            ['monthly', 'quarterly', 'annually'],
-            format_func=lambda x: {'monthly': '월별', 'quarterly': '분기별', 'annually': '연별'}[x]
-        )
-    
-    with col2:
-        initial_investment = st.number_input(
-            "초기 투자금액 (만원)",
-            min_value=100,
-            max_value=10000,
-            value=1000,
-            step=100
-        ) * 10000
-        
-        monthly_contribution = st.number_input(
-            "월 적립금액 (만원)",
-            min_value=0,
-            max_value=500,
-            value=50,
-            step=10
-        ) * 10000
-    
-    if st.button("백테스팅 실행"):
-        with st.spinner("백테스팅을 실행하고 있습니다..."):
-            # 간단한 백테스팅 시뮬레이션
-            backtest_results = run_simple_backtest(
-                user_profile, 
-                initial_investment, 
-                monthly_contribution,
-                backtest_period
-            )
-            
-            if backtest_results:
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.metric("최종 자산", format_currency(backtest_results['final_value']))
-                    st.metric("총 수익률", f"{backtest_results['total_return']:.2f}%")
-                    st.metric("연평균 수익률", f"{backtest_results['annual_return']:.2f}%")
+                    st.markdown("**🏛️ 매크로 경제 분석**")
+                    st.write(analysis['macro_analysis'])
+                    
+                    st.markdown("**📈 ETF 시장 동향**")
+                    st.write(analysis['market_trends'])
                 
                 with col2:
-                    st.metric("최대 낙폭", f"{backtest_results['max_drawdown']:.2f}%")
-                    st.metric("샤프 비율", f"{backtest_results['sharpe_ratio']:.3f}")
-                    st.metric("변동성", f"{backtest_results['volatility']:.2f}%")
+                    st.markdown("**🎯 투자 전략**")
+                    st.write(analysis['investment_strategy'])
+                    
+                    st.markdown("**⚠️ 리스크 요인**")
+                    st.write(analysis['risk_factors'])
+                
+                # 2. 포트폴리오 결과
+                st.subheader("💼 AI 추천 포트폴리오")
+                
+                weights = portfolio['weights']
+                
+                if weights:
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        st.markdown("**📊 포트폴리오 구성**")
+                        pie_chart = create_portfolio_pie_chart(weights)
+                        st.plotly_chart(pie_chart, use_container_width=True)
+                    
+                    with col2:
+                        st.markdown("**📋 상세 구성**")
+                        weights_df = pd.DataFrame([
+                            {
+                                'ETF명': name,
+                                '비중': f"{weight*100:.1f}%",
+                                '투자금액': format_currency(weight * user_profile['current_assets'])
+                            }
+                            for name, weight in weights.items()
+                        ])
+                        st.dataframe(weights_df, use_container_width=True)
+                    
+                    # 3. 실제 성과 계산
+                    st.subheader("📈 예상 성과 (실제 데이터 기반)")
+                    
+                    with st.spinner("실제 ETF 데이터로 성과를 계산하고 있습니다..."):
+                        performance = calculate_portfolio_performance(
+                            weights, 
+                            st.session_state.etf_data
+                        )
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            expected_return = performance['expected_return'] * 100
+                            st.metric(
+                                "연환산 수익률", 
+                                f"{expected_return:.2f}%",
+                                help="실제 ETF 과거 수익률 기반"
+                            )
+                        
+                        with col2:
+                            volatility = performance['volatility'] * 100
+                            st.metric(
+                                "연환산 변동성", 
+                                f"{volatility:.2f}%",
+                                help="실제 ETF 과거 변동성 기반"
+                            )
+                        
+                        with col3:
+                            sharpe_ratio = performance['sharpe_ratio']
+                            st.metric(
+                                "샤프 비율", 
+                                f"{sharpe_ratio:.3f}",
+                                help="위험 대비 수익률"
+                            )
+                        
+                        with col4:
+                            max_drawdown = performance['max_drawdown'] * 100
+                            st.metric(
+                                "최대 낙폭", 
+                                f"{max_drawdown:.2f}%",
+                                help="최대 손실 구간"
+                            )
+                    
+                    # 4. AI 분석 근거
+                    with st.expander("🧠 AI 분석 근거", expanded=False):
+                        st.markdown("**배분 근거:**")
+                        st.write(portfolio['allocation_reasoning'])
+                        
+                        st.markdown("**예상 수익률:**")
+                        st.write(portfolio['expected_return'])
+                        
+                        st.markdown("**리스크 수준:**")
+                        st.write(portfolio['risk_level'])
+                        
+                        st.markdown("**데이터 소스:**")
+                        st.write(comprehensive_result['source'])
+                        
+                        if performance.get('data_points', 0) > 0:
+                            st.success(f"✅ 실제 ETF 데이터 {performance['data_points']}일 기반 계산")
+                        else:
+                            st.warning("⚠️ 샘플 데이터 기반 계산")
+                
+                else:
+                    st.error("포트폴리오 생성에 실패했습니다.")
+            
+            else:
+                st.error("AI 분석에 실패했습니다. 다시 시도해주세요.")
+    
+    # 이전 분석 결과 표시
+    if 'ai_analysis_result' in st.session_state:
+        st.markdown("---")
+        st.subheader("📋 최근 분석 결과")
+        
+        result = st.session_state.ai_analysis_result
+        portfolio = result['portfolio']
+        
+        if portfolio['weights']:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("포트폴리오 ETF 수", len(portfolio['weights']))
+            
+            with col2:
+                st.metric("예상 수익률", portfolio['expected_return'])
+            
+            with col3:
+                st.metric("리스크 수준", portfolio['risk_level'])
+            
+            # 간단한 포트폴리오 요약
+            st.markdown("**포트폴리오 요약:**")
+            for etf_name, weight in portfolio['weights'].items():
+                st.write(f"• {etf_name}: {weight*100:.1f}%")
 
 def calculate_expected_retirement_assets(user_profile):
     """예상 은퇴자산 계산"""
@@ -494,52 +264,6 @@ def calculate_expected_retirement_assets(user_profile):
     future_value_monthly = monthly_contribution * (((1 + monthly_return) ** (investment_period * 12) - 1) / monthly_return)
     
     return future_value_current + future_value_monthly
-
-def run_simple_backtest(user_profile, initial_investment, monthly_contribution, period):
-    """간단한 백테스팅 실행"""
-    # 샘플 백테스팅 결과
-    period_years = {'1y': 1, '3y': 3, '5y': 5}[period]
-    
-    # 가정된 수익률 (실제로는 ETF 데이터 기반으로 계산)
-    annual_return = 0.07  # 7%
-    volatility = 0.15     # 15%
-    
-    # 몬테카를로 시뮬레이션
-    np.random.seed(42)
-    monthly_returns = np.random.normal(annual_return/12, volatility/np.sqrt(12), period_years * 12)
-    
-    # 포트폴리오 가치 계산
-    portfolio_values = [initial_investment]
-    
-    for i, monthly_return in enumerate(monthly_returns):
-        current_value = portfolio_values[-1]
-        new_value = current_value * (1 + monthly_return) + monthly_contribution
-        portfolio_values.append(new_value)
-    
-    final_value = portfolio_values[-1]
-    total_invested = initial_investment + monthly_contribution * len(monthly_returns)
-    total_return = ((final_value - total_invested) / total_invested) * 100
-    annual_return_actual = ((final_value / initial_investment) ** (1/period_years) - 1) * 100
-    
-    # 최대 낙폭 계산
-    peak = portfolio_values[0]
-    max_drawdown = 0
-    
-    for value in portfolio_values:
-        if value > peak:
-            peak = value
-        drawdown = (peak - value) / peak * 100
-        if drawdown > max_drawdown:
-            max_drawdown = drawdown
-    
-    return {
-        'final_value': final_value,
-        'total_return': total_return,
-        'annual_return': annual_return_actual,
-        'max_drawdown': max_drawdown,
-        'sharpe_ratio': annual_return_actual / (volatility * 100),
-        'volatility': volatility * 100
-    }
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-# ai_analyzer.py - 완전 재작성
+# ai_analyzer.py
 import json
 import re
 from typing import Dict, Any, Optional
@@ -7,6 +7,7 @@ from config import Config
 
 class AIAnalyzer:
     def __init__(self):
+        """LangChain HyperClova X 초기화"""
         self.api_key = Config.HYPERCLOVA_X_API_KEY
         self.model_name = Config.HYPERCLOVA_MODEL
         self.max_tokens = Config.HYPERCLOVA_MAX_TOKENS
@@ -29,302 +30,261 @@ class AIAnalyzer:
             self.available = False
             print("❌ HyperClova X API 키가 없습니다")
     
-    def analyze_market_situation(self, macro_data: Dict, etf_data: Dict) -> str:
-        """시장 상황 분석 - 단순화된 버전"""
+    def comprehensive_market_analysis(self, macro_data: Dict, etf_data: Dict, user_profile: Dict) -> Dict:
+        """종합적인 시장 분석 및 포트폴리오 추천 (통합 기능)"""
         if not self.available:
-            return self._get_detailed_market_analysis(macro_data, etf_data)
+            return self._get_comprehensive_default_analysis(macro_data, etf_data, user_profile)
         
         try:
-            # 매우 간단한 프롬프트로 시작
-            prompt = f"""
-현재 한국 경제 상황을 분석해주세요.
-
-GDP 성장률: {macro_data.get('GDP', {}).get('current', 3.0)}%
-인플레이션: {macro_data.get('CPI', {}).get('current', 2.0)}%
-기준금리: {macro_data.get('INTEREST_RATE', {}).get('current', 3.5)}%
-
-다음 4가지로 나누어 분석해주세요:
-1. 경제 상황 요약
-2. 투자 환경 평가  
-3. 주요 기회 요인
-4. 리스크 요인
-
-각 항목을 2-3줄로 간단히 설명해주세요.
-"""
+            # 매크로 데이터 요약
+            macro_summary = self._format_macro_data(macro_data)
+            etf_summary = self._format_etf_performance(etf_data)
+            profile_summary = self._format_user_profile(user_profile)
             
-            response = self.client.invoke(prompt)
-            
-            if response and response.content and len(response.content.strip()) > 50:
-                return response.content
-            else:
-                print("⚠️ AI 응답이 부족합니다. 기본 분석을 제공합니다.")
-                return self._get_detailed_market_analysis(macro_data, etf_data)
-                
-        except Exception as e:
-            print(f"❌ AI 시장 분석 실패: {e}")
-            return self._get_detailed_market_analysis(macro_data, etf_data)
-    
-    def generate_portfolio_strategy(self, macro_data: Dict, etf_data: Dict, user_profile: Dict) -> str:
-        """포트폴리오 전략 생성"""
-        if not self.available:
-            return self._get_detailed_portfolio_strategy(user_profile, macro_data)
-        
-        try:
-            age = user_profile.get('age', 30)
-            risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
-            
-            prompt = f"""
-{age}세, {risk_tolerance} 투자자를 위한 국내 ETF 포트폴리오 전략을 제시해주세요.
-
-현재 경제 상황:
-- GDP: {macro_data.get('GDP', {}).get('current', 3.0)}%
-- 인플레이션: {macro_data.get('CPI', {}).get('current', 2.0)}%
-
-다음 순서로 전략을 제시해주세요:
-1. 투자 방향성
-2. 자산배분 전략
-3. 추천 ETF 종목 3개
-4. 리밸런싱 방법
-
-실용적이고 구체적으로 설명해주세요.
-"""
-            
-            response = self.client.invoke(prompt)
-            
-            if response and response.content and len(response.content.strip()) > 100:
-                return response.content
-            else:
-                return self._get_detailed_portfolio_strategy(user_profile, macro_data)
-                
-        except Exception as e:
-            print(f"❌ AI 포트폴리오 전략 생성 실패: {e}")
-            return self._get_detailed_portfolio_strategy(user_profile, macro_data)
-    
-    def generate_ai_portfolio_weights(self, macro_data: Dict, etf_data: Dict, user_profile: Dict) -> Dict:
-        """AI 기반 포트폴리오 가중치 생성"""
-        if not self.available:
-            return self._get_smart_default_weights(user_profile, macro_data, etf_data)
-        
-        try:
-            age = user_profile.get('age', 30)
-            risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
-            
-            # ETF 목록 생성
-            etf_list = []
+            # 사용 가능한 ETF 목록
+            available_etfs = []
             for category, etfs in etf_data.items():
-                for name in list(etfs.keys())[:3]:  # 각 카테고리에서 3개씩
-                    etf_list.append(name)
+                for etf_name in list(etfs.keys())[:3]:  # 각 카테고리에서 3개씩
+                    available_etfs.append(f"{etf_name} ({category})")
             
             prompt = f"""
-{age}세, {risk_tolerance} 투자자를 위한 ETF 포트폴리오 비중을 정해주세요.
+당신은 전문 퇴직연금 포트폴리오 매니저입니다. 다음 정보를 종합 분석하여 완전한 투자 솔루션을 제공해주세요.
 
-투자 가능한 ETF:
-{', '.join(etf_list[:10])}
+**사용자 프로필:**
+{profile_summary}
 
-경제 상황을 고려하여 각 ETF의 투자 비중을 %로 제시해주세요.
-모든 비중의 합은 100%가 되어야 합니다.
+**현재 경제 상황:**
+{macro_summary}
 
-다음 형식으로만 답변해주세요:
-ETF명: 비중%
-ETF명: 비중%
-...
+**ETF 시장 현황:**
+{etf_summary}
+
+**투자 가능한 ETF:**
+{chr(10).join(available_etfs[:15])}
+
+다음 순서로 종합 분석해주세요:
+
+1. **매크로 경제 분석**: 현재 경제 상황과 향후 전망 (3-4줄)
+2. **ETF 시장 동향**: 주요 트렌드와 기회 요인 (3-4줄)  
+3. **투자 전략**: 사용자 맞춤형 투자 방향성 (3-4줄)
+4. **리스크 요인**: 주의해야 할 위험 요소들 (2-3줄)
+
+그리고 마지막에 구체적인 포트폴리오를 다음 JSON 형식으로 제시해주세요:
+
+{{"portfolio": {{"ETF명1": 비중, "ETF명2": 비중, ...}}, "allocation_reasoning": "배분 근거", "expected_return": "예상수익률", "risk_level": "리스크수준"}}
+
+모든 ETF 비중의 합은 1.0이 되어야 하며, 최소 3개 이상의 ETF를 선택해주세요.
 """
             
             response = self.client.invoke(prompt)
-            
-            if response and response.content:
-                weights = self._parse_weights_from_response(response.content, etf_list)
-                if weights:
-                    return weights
-            
-            return self._get_smart_default_weights(user_profile, macro_data, etf_data)
+            return self._parse_comprehensive_response(response.content, etf_data, user_profile)
             
         except Exception as e:
-            print(f"❌ AI 포트폴리오 가중치 생성 실패: {e}")
-            return self._get_smart_default_weights(user_profile, macro_data, etf_data)
+            print(f"❌ 종합 시장 분석 실패: {e}")
+            return self._get_comprehensive_default_analysis(macro_data, etf_data, user_profile)
     
-    def _parse_weights_from_response(self, response_text: str, etf_list: list) -> Dict:
-        """AI 응답에서 가중치 파싱"""
-        weights = {}
-        lines = response_text.split('\n')
+    def _parse_comprehensive_response(self, response_text: str, etf_data: Dict, user_profile: Dict) -> Dict:
+        """AI 응답 파싱"""
+        try:
+            # 텍스트 분석 부분 추출
+            sections = {
+                'macro_analysis': '',
+                'market_trends': '',
+                'investment_strategy': '',
+                'risk_factors': ''
+            }
+            
+            # 간단한 텍스트 파싱 (실제로는 더 정교한 파싱 필요)
+            lines = response_text.split('\n')
+            current_section = None
+            
+            for line in lines:
+                line = line.strip()
+                if '매크로' in line or '경제' in line:
+                    current_section = 'macro_analysis'
+                elif 'ETF' in line or '시장' in line:
+                    current_section = 'market_trends'
+                elif '투자' in line or '전략' in line:
+                    current_section = 'investment_strategy'
+                elif '리스크' in line or '위험' in line:
+                    current_section = 'risk_factors'
+                elif current_section and line:
+                    sections[current_section] += line + ' '
+            
+            # JSON 포트폴리오 부분 추출
+            json_match = re.search(r'\{[^{}]*"portfolio"[^{}]*\{[^{}]*\}[^{}]*\}', response_text, re.DOTALL)
+            portfolio_data = {}
+            
+            if json_match:
+                try:
+                    portfolio_json = json.loads(json_match.group())
+                    portfolio_data = portfolio_json
+                except:
+                    pass
+            
+            # 포트폴리오가 없으면 기본 생성
+            if not portfolio_data.get('portfolio'):
+                portfolio_data = self._generate_default_portfolio(etf_data, user_profile)
+            
+            # 포트폴리오 가중치 검증 및 정규화
+            weights = portfolio_data.get('portfolio', {})
+            validated_weights = self._validate_and_normalize_weights(weights, etf_data)
+            
+            return {
+                'analysis': {
+                    'macro_analysis': sections['macro_analysis'].strip() or "현재 경제 상황은 안정적인 성장세를 보이고 있습니다.",
+                    'market_trends': sections['market_trends'].strip() or "ETF 시장에서 국내 주식형과 채권형의 균형잡힌 접근이 필요합니다.",
+                    'investment_strategy': sections['investment_strategy'].strip() or "분산투자를 통한 안정적인 수익 추구가 바람직합니다.",
+                    'risk_factors': sections['risk_factors'].strip() or "시장 변동성과 금리 변화에 주의가 필요합니다."
+                },
+                'portfolio': {
+                    'weights': validated_weights,
+                    'allocation_reasoning': portfolio_data.get('allocation_reasoning', 'AI 기반 최적 배분'),
+                    'expected_return': portfolio_data.get('expected_return', '6-8%'),
+                    'risk_level': portfolio_data.get('risk_level', '중간')
+                },
+                'source': 'ai_generated'
+            }
+            
+        except Exception as e:
+            print(f"❌ AI 응답 파싱 실패: {e}")
+            return self._get_comprehensive_default_analysis({}, etf_data, user_profile)
+    
+    def _validate_and_normalize_weights(self, weights: Dict, etf_data: Dict) -> Dict:
+        """가중치 검증 및 정규화"""
+        if not weights:
+            return {}
         
-        for line in lines:
-            for etf_name in etf_list:
-                if etf_name in line:
-                    # 숫자 추출
-                    numbers = re.findall(r'\d+\.?\d*', line)
-                    if numbers:
-                        try:
-                            weight = float(numbers[0]) / 100.0
-                            if 0 <= weight <= 1:
-                                weights[etf_name] = weight
-                        except:
-                            continue
+        # 실제 존재하는 ETF만 필터링
+        valid_weights = {}
+        all_etf_names = []
+        
+        for category, etfs in etf_data.items():
+            all_etf_names.extend(etfs.keys())
+        
+        for etf_name, weight in weights.items():
+            # 정확한 매칭 또는 유사한 이름 찾기
+            matched_name = self._find_matching_etf_name(etf_name, all_etf_names)
+            if matched_name and isinstance(weight, (int, float)) and 0 <= weight <= 1:
+                valid_weights[matched_name] = float(weight)
         
         # 가중치 정규화
-        total_weight = sum(weights.values())
-        if total_weight > 0 and len(weights) >= 3:
-            weights = {k: v/total_weight for k, v in weights.items()}
-            return weights
+        total_weight = sum(valid_weights.values())
+        if total_weight > 0 and len(valid_weights) >= 3:
+            valid_weights = {k: v/total_weight for k, v in valid_weights.items()}
+            return valid_weights
         
         return {}
     
-    def _get_detailed_market_analysis(self, macro_data: Dict, etf_data: Dict) -> str:
-        """상세한 기본 시장 분석"""
-        gdp = macro_data.get('GDP', {}).get('current', 3.0)
-        inflation = macro_data.get('CPI', {}).get('current', 2.0)
-        interest_rate = macro_data.get('INTEREST_RATE', {}).get('current', 3.5)
+    def _find_matching_etf_name(self, ai_name: str, available_names: list) -> str:
+        """AI가 제안한 ETF 이름과 실제 ETF 이름 매칭"""
+        # 정확한 매칭
+        if ai_name in available_names:
+            return ai_name
         
-        return f"""
-## 📊 현재 시장 상황 분석
-
-### 1. 경제 상황 요약
-한국 경제는 GDP 성장률 {gdp}%로 {self._get_growth_assessment(gdp)} 성장세를 보이고 있습니다. 
-인플레이션 {inflation}%는 {self._get_inflation_assessment(inflation)} 수준이며, 
-기준금리 {interest_rate}%는 통화정책의 {self._get_rate_assessment(interest_rate)} 기조를 반영합니다.
-
-### 2. 투자 환경 평가
-현재 투자 환경은 {self._get_investment_environment(gdp, inflation, interest_rate)}입니다.
-ETF 시장에서는 국내주식형과 채권형 ETF 간의 균형잡힌 접근이 필요한 시점입니다.
-
-### 3. 주요 기회 요인
-- 국내 2차전지 및 반도체 산업의 구조적 성장 지속
-- 금리 안정화에 따른 채권 ETF 매력도 증가
-- 국내 리츠 시장의 안정적 배당 수익 기대
-
-### 4. 리스크 요인
-- 글로벌 경제 불확실성에 따른 변동성 확대 가능성
-- 금리 변동에 따른 자산군별 상대적 매력도 변화
-- 지정학적 리스크가 국내 시장에 미치는 영향
-"""
+        # 부분 매칭
+        for name in available_names:
+            if ai_name in name or name in ai_name:
+                return name
+        
+        # 키워드 매칭
+        ai_keywords = ai_name.replace('KODEX ', '').replace('TIGER ', '').split()
+        for name in available_names:
+            for keyword in ai_keywords:
+                if keyword in name and len(keyword) > 2:
+                    return name
+        
+        return None
     
-    def _get_detailed_portfolio_strategy(self, user_profile: Dict, macro_data: Dict) -> str:
-        """상세한 기본 포트폴리오 전략"""
+    def _generate_default_portfolio(self, etf_data: Dict, user_profile: Dict) -> Dict:
+        """기본 포트폴리오 생성"""
         age = user_profile.get('age', 30)
         risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
         
+        # 나이와 위험성향에 따른 기본 배분
         if age < 40:
-            stock_ratio = "50-60%"
-            bond_ratio = "25-35%"
-            strategy_focus = "성장 중심"
+            if risk_tolerance in ['적극투자형', '위험중립형']:
+                base_allocation = {'국내주식형': 0.5, '국내채권형': 0.3, '국내섹터/테마': 0.15, '국내대안투자': 0.05}
+            else:
+                base_allocation = {'국내주식형': 0.4, '국내채권형': 0.45, '국내섹터/테마': 0.1, '국내대안투자': 0.05}
         elif age < 55:
-            stock_ratio = "40-50%"
-            bond_ratio = "35-45%"
-            strategy_focus = "균형 중심"
+            base_allocation = {'국내주식형': 0.4, '국내채권형': 0.4, '국내섹터/테마': 0.1, '국내대안투자': 0.1}
         else:
-            stock_ratio = "30-40%"
-            bond_ratio = "45-55%"
-            strategy_focus = "안정 중심"
+            base_allocation = {'국내주식형': 0.3, '국내채권형': 0.55, '국내섹터/테마': 0.05, '국내대안투자': 0.1}
         
-        return f"""
-## 🎯 맞춤형 포트폴리오 전략
-
-### 1. 투자 방향성
-{age}세 {risk_tolerance} 투자자에게는 **{strategy_focus}** 전략이 적합합니다.
-현재 경제 상황을 고려할 때, 국내 ETF 중심의 분산투자를 통해 
-안정성과 수익성의 균형을 추구하는 것이 바람직합니다.
-
-### 2. 자산배분 전략
-- **국내주식형 ETF**: {stock_ratio} (KODEX 200, TIGER 200 중심)
-- **국내채권형 ETF**: {bond_ratio} (국고채 10년, 단기채권 혼합)
-- **섹터/테마 ETF**: 10-15% (2차전지, 바이오 등 성장 섹터)
-- **대안투자 ETF**: 5-10% (금, 국내 리츠 등 분산효과)
-
-### 3. 추천 ETF 종목
-1. **KODEX 200 (069500)**: 국내 대표지수 추종, 안정성 확보
-2. **KODEX 국고채10년 (148070)**: 금리 안정화 수혜, 안전자산 역할
-3. **KODEX 2차전지산업 (117700)**: 국내 성장 산업, 장기 투자 매력
-
-### 4. 리밸런싱 방법
-- **주기**: 분기별 (3개월마다) 포트폴리오 점검
-- **기준**: 목표 비중에서 ±5% 이상 이탈시 조정
-- **시장 상황**: 급격한 변동성 확대시 임시 조정 고려
-"""
-    
-    def _get_smart_default_weights(self, user_profile: Dict, macro_data: Dict, etf_data: Dict) -> Dict:
-        """스마트 기본 가중치 (경제지표 반영)"""
-        age = user_profile.get('age', 30)
-        risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
+        # 실제 ETF 선택
+        portfolio = {}
+        for category, target_weight in base_allocation.items():
+            if category in etf_data and etf_data[category]:
+                etf_list = list(etf_data[category].keys())
+                if len(etf_list) >= 2:
+                    portfolio[etf_list[0]] = target_weight * 0.6
+                    portfolio[etf_list[1]] = target_weight * 0.4
+                else:
+                    portfolio[etf_list[0]] = target_weight
         
-        # 경제지표 기반 조정
-        gdp = macro_data.get('GDP', {}).get('current', 3.0)
-        inflation = macro_data.get('CPI', {}).get('current', 2.0)
-        
-        # 기본 비중 설정
-        if age < 40:
-            base_stock = 0.55
-            base_bond = 0.30
-        elif age < 55:
-            base_stock = 0.45
-            base_bond = 0.40
-        else:
-            base_stock = 0.35
-            base_bond = 0.50
-        
-        # 경제지표 조정
-        if gdp > 3.5:  # 고성장
-            base_stock += 0.05
-        elif gdp < 2.0:  # 저성장
-            base_stock -= 0.05
-            
-        if inflation > 3.0:  # 고인플레이션
-            base_bond -= 0.05
-        
-        # 위험성향 조정
-        risk_adjustments = {
-            '안정형': -0.1,
-            '안정추구형': -0.05,
-            '위험중립형': 0.0,
-            '적극투자형': 0.1
+        return {
+            'portfolio': portfolio,
+            'allocation_reasoning': f'{age}세 {risk_tolerance} 투자자 맞춤 기본 배분',
+            'expected_return': '5-7%',
+            'risk_level': '중간'
         }
-        base_stock += risk_adjustments.get(risk_tolerance, 0)
-        
-        # ETF별 가중치 배분
-        weights = {}
-        
-        # 주요 ETF 선택
-        main_etfs = [
-            ('KODEX 200', base_stock * 0.6),
-            ('TIGER 200', base_stock * 0.4),
-            ('KODEX 국고채10년', base_bond * 0.6),
-            ('KODEX 단기채권', base_bond * 0.4),
-            ('KODEX 2차전지산업', 0.08),
-            ('KODEX 골드선물(H)', 0.07)
-        ]
-        
-        # 실제 존재하는 ETF만 선택
-        for etf_name, target_weight in main_etfs:
-            for category, etfs in etf_data.items():
-                if etf_name in etfs:
-                    weights[etf_name] = target_weight
-                    break
-        
-        # 가중치 정규화
-        total_weight = sum(weights.values())
-        if total_weight > 0:
-            weights = {k: v/total_weight for k, v in weights.items()}
-        
-        return weights
     
-    def _get_growth_assessment(self, gdp):
-        if gdp > 3.5: return "견조한"
-        elif gdp > 2.5: return "안정적인"
-        else: return "둔화된"
+    def _get_comprehensive_default_analysis(self, macro_data: Dict, etf_data: Dict, user_profile: Dict) -> Dict:
+        """기본 종합 분석"""
+        age = user_profile.get('age', 30)
+        risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
+        
+        # 기본 포트폴리오 생성
+        default_portfolio = self._generate_default_portfolio(etf_data, user_profile)
+        
+        return {
+            'analysis': {
+                'macro_analysis': f"현재 한국 경제는 GDP 성장률 3.2%, 인플레이션 2.1% 수준으로 안정적인 성장세를 보이고 있습니다. 기준금리 3.5%는 통화정책의 중립적 기조를 반영하며, 전반적으로 투자하기에 양호한 환경입니다.",
+                'market_trends': f"국내 ETF 시장에서는 2차전지, 반도체 등 성장 섹터의 관심이 높아지고 있으며, 금리 안정화에 따른 채권 ETF의 매력도도 증가하고 있습니다. 국내 리츠와 금 ETF를 통한 분산투자 효과도 주목받고 있습니다.",
+                'investment_strategy': f"{age}세 {risk_tolerance} 투자자에게는 국내 ETF 중심의 분산투자가 적합합니다. 안정성과 성장성의 균형을 추구하며, 정기적인 리밸런싱을 통해 목표 수익률 달성을 추구하는 것이 바람직합니다.",
+                'risk_factors': f"글로벌 경제 불확실성과 금리 변동, 지정학적 리스크가 주요 위험 요인입니다. 특히 환율 변동과 원자재 가격 변화에 따른 영향을 주의 깊게 모니터링해야 합니다."
+            },
+            'portfolio': {
+                'weights': default_portfolio['portfolio'],
+                'allocation_reasoning': default_portfolio['allocation_reasoning'],
+                'expected_return': default_portfolio['expected_return'],
+                'risk_level': default_portfolio['risk_level']
+            },
+            'source': 'default_analysis'
+        }
     
-    def _get_inflation_assessment(self, inflation):
-        if inflation > 3.0: return "높은"
-        elif inflation > 1.5: return "적정"
-        else: return "낮은"
+    def _format_macro_data(self, macro_data: Dict) -> str:
+        """매크로 데이터 포맷팅"""
+        if not macro_data:
+            return "GDP: 3.2%, 인플레이션: 2.1%, 기준금리: 3.5%"
+        
+        formatted = []
+        for indicator, data in macro_data.items():
+            if isinstance(data, dict) and 'current' in data:
+                trend_symbol = "📈" if data.get('trend') == 'up' else "📉"
+                formatted.append(f"{indicator}: {data['current']:.1f}% {trend_symbol}")
+        
+        return ", ".join(formatted) if formatted else "경제지표 데이터 없음"
     
-    def _get_rate_assessment(self, rate):
-        if rate > 4.0: return "긴축적"
-        elif rate > 2.5: return "중립적"
-        else: return "완화적"
+    def _format_etf_performance(self, etf_data: Dict) -> str:
+        """ETF 성과 데이터 포맷팅"""
+        if not etf_data:
+            return "ETF 데이터 없음"
+        
+        formatted = []
+        for category, etfs in etf_data.items():
+            etf_count = len(etfs)
+            formatted.append(f"{category}: {etf_count}개 ETF")
+        
+        return ", ".join(formatted)
     
-    def _get_investment_environment(self, gdp, inflation, rate):
-        if gdp > 3.0 and inflation < 3.0:
-            return "양호한 투자 환경"
-        elif gdp < 2.0 or inflation > 4.0:
-            return "신중한 접근이 필요한 환경"
-        else:
-            return "혼재된 신호를 보이는 환경"
+    def _format_user_profile(self, user_profile: Dict) -> str:
+        """사용자 프로필 포맷팅"""
+        return f"""
+나이: {user_profile.get('age', 30)}세
+투자성향: {user_profile.get('risk_tolerance', '위험중립형')}
+투자기간: {user_profile.get('investment_period', 20)}년
+현재 자산: {user_profile.get('current_assets', 0):,}원
+월 납입액: {user_profile.get('monthly_contribution', 0):,}원
+"""
