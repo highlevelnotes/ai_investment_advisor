@@ -112,6 +112,16 @@ def show_dashboard(user_profile):
     """대시보드 페이지"""
     st.header("📊 포트폴리오 대시보드")
     
+    # 프로젝트 목적 설명 추가
+    st.info("""
+    🇰🇷 **국내 자본시장 활성화 프로젝트**
+    
+    이 시스템은 퇴직연금 자금이 국내에서 순환되어 우리나라 경제 성장에 기여할 수 있도록 
+    **순수 국내 ETF만**을 활용한 포트폴리오를 제공합니다.
+    
+    ✅ 환율 리스크 제거  ✅ 세제 혜택 활용  ✅ 국내 경제 기여  ✅ 정보 접근성 향상
+    """)
+
     # 시장 현황
     if 'market_data' in st.session_state:
         market_data = st.session_state.market_data
@@ -202,36 +212,85 @@ def show_market_analysis():
 
 def show_portfolio_optimization(user_profile):
     """포트폴리오 최적화 페이지"""
-    st.header("⚖️ 포트폴리오 최적화")
+    st.header("⚖️ AI 기반 포트폴리오 최적화")
     
     if 'etf_data' not in st.session_state:
         st.warning("데이터를 먼저 로드해주세요.")
         return
     
     optimizer = PortfolioOptimizer()
+    ai_analyzer = AIAnalyzer()
     etf_data = st.session_state.etf_data
     
     # 최적화 방법 선택
     optimization_method = st.selectbox(
         "최적화 방법 선택",
-        ['lifecycle', 'max_sharpe', 'min_variance'],
+        ['ai_based', 'lifecycle', 'max_sharpe', 'min_variance'],
         format_func=lambda x: {
-            'lifecycle': '생애주기별 배분',
-            'max_sharpe': '최대 샤프비율',
-            'min_variance': '최소분산'
+            'ai_based': '🤖 AI 기반 시장분석 최적화',
+            'lifecycle': '📅 생애주기별 배분',
+            'max_sharpe': '📈 최대 샤프비율',
+            'min_variance': '🛡️ 최소분산'
         }[x]
     )
     
+    # AI 기반 최적화 설명
+    if optimization_method == 'ai_based':
+        st.info("""
+        🤖 **AI 기반 시장분석 최적화**
+        
+        HyperClova X가 현재 경제지표와 ETF 성과를 실시간 분석하여:
+        - 매크로 경제 상황에 맞는 자산배분 결정
+        - 개별 ETF의 성과와 전망을 고려한 종목 선택
+        - 시장 변화에 따른 동적 포트폴리오 구성
+        
+        기존 정적 배분과 달리 **시장 상황을 실시간 반영**합니다.
+        """)
+    
     if st.button("포트폴리오 최적화 실행"):
-        with st.spinner("최적화를 수행하고 있습니다..."):
-            optimal_portfolio = optimizer.optimize_portfolio(
-                etf_data, 
-                method=optimization_method,
-                user_profile=user_profile
-            )
+        with st.spinner("AI가 시장을 분석하고 최적화를 수행하고 있습니다..."):
+            if optimization_method == 'ai_based':
+                optimal_portfolio = optimizer.optimize_portfolio(
+                    etf_data, 
+                    method=optimization_method,
+                    user_profile=user_profile,
+                    ai_analyzer=ai_analyzer,
+                    macro_data=st.session_state.get('economic_data', {})
+                )
+            else:
+                optimal_portfolio = optimizer.optimize_portfolio(
+                    etf_data, 
+                    method=optimization_method,
+                    user_profile=user_profile
+                )
             
             if optimal_portfolio:
                 st.session_state.optimal_portfolio = optimal_portfolio
+                
+                # AI 기반 결과 표시
+                if optimization_method == 'ai_based':
+                    st.success("🤖 AI 분석 완료!")
+                    
+                    # AI 분석 결과 표시
+                    with st.expander("🧠 AI 분석 상세 결과", expanded=True):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader("📊 시장 분석")
+                            st.write("**시장 전망:**")
+                            st.write(optimal_portfolio.get('market_outlook', ''))
+                            
+                            st.write("**리스크 평가:**")
+                            st.write(optimal_portfolio.get('risk_assessment', ''))
+                        
+                        with col2:
+                            st.subheader("🎯 포트폴리오 전략")
+                            st.write("**AI 추천 근거:**")
+                            st.write(optimal_portfolio.get('ai_reasoning', ''))
+                            
+                            st.write("**리밸런싱 신호:**")
+                            for trigger in optimal_portfolio.get('rebalancing_trigger', []):
+                                st.write(f"• {trigger}")
                 
                 col1, col2 = st.columns([1, 1])
                 
@@ -250,7 +309,11 @@ def show_portfolio_optimization(user_profile):
                 # 상세 구성
                 st.subheader("📋 상세 구성")
                 weights_df = pd.DataFrame([
-                    {'ETF명': name, '비중': f"{weight*100:.2f}%", '투자금액': format_currency(weight * user_profile['current_assets'])}
+                    {
+                        'ETF명': name, 
+                        '비중': f"{weight*100:.2f}%", 
+                        '투자금액': format_currency(weight * user_profile['current_assets'])
+                    }
                     for name, weight in optimal_portfolio['weights'].items()
                 ])
                 st.dataframe(weights_df, use_container_width=True)

@@ -10,14 +10,16 @@ class PortfolioOptimizer:
         self.risk_free_rate = PORTFOLIO_SETTINGS['RISK_FREE_RATE']
         self.transaction_cost = PORTFOLIO_SETTINGS['TRANSACTION_COST']
         
-    def optimize_portfolio(self, returns_data, method='max_sharpe', user_profile=None):
-        """포트폴리오 최적화"""
+    def optimize_portfolio(self, returns_data, method='max_sharpe', user_profile=None, ai_analyzer=None, macro_data=None):
+        """포트폴리오 최적화 (AI 기반 옵션 추가)"""
         returns_df = self._prepare_returns_data(returns_data)
         
         if returns_df.empty:
             return self._get_equal_weight_portfolio(returns_data)
         
-        if method == 'min_variance':
+        if method == 'ai_based' and ai_analyzer and macro_data:
+            return self._ai_based_optimization(returns_df, user_profile, ai_analyzer, macro_data, returns_data)
+        elif method == 'min_variance':
             return self._minimize_variance(returns_df)
         elif method == 'max_sharpe':
             return self._maximize_sharpe_ratio(returns_df)
@@ -25,6 +27,63 @@ class PortfolioOptimizer:
             return self._lifecycle_allocation(returns_df, user_profile)
         else:
             return self._get_equal_weight_portfolio(returns_data)
+
+    def _ai_based_optimization(self, returns_df, user_profile, ai_analyzer, macro_data, etf_data):
+        """AI 기반 포트폴리오 최적화"""
+        try:
+            # 1단계: AI가 자산배분 결정
+            ai_allocation = ai_analyzer.generate_ai_portfolio_allocation(
+                macro_data, etf_data, user_profile
+            )
+            
+            # 2단계: AI가 구체적 ETF 선택
+            ai_etf_selection = ai_analyzer.generate_specific_etf_selection(
+                ai_allocation['allocation'], etf_data, macro_data
+            )
+            
+            # 3단계: 선택된 ETF의 실제 성과 지표 계산
+            weights = ai_etf_selection['weights']
+            
+            # ETF 이름을 returns_df 컬럼과 매칭
+            matched_weights = {}
+            for etf_name, weight in weights.items():
+                if etf_name in returns_df.columns:
+                    matched_weights[etf_name] = weight
+            
+            if not matched_weights:
+                # 매칭 실패시 기본 최적화로 폴백
+                return self._maximize_sharpe_ratio(returns_df)
+            
+            # 가중치 정규화
+            total_weight = sum(matched_weights.values())
+            if total_weight > 0:
+                matched_weights = {k: v/total_weight for k, v in matched_weights.items()}
+            
+            # 성과 지표 계산
+            weight_array = np.array([matched_weights.get(col, 0) for col in returns_df.columns])
+            expected_returns = returns_df.mean() * 252
+            cov_matrix = returns_df.cov() * 252
+            
+            portfolio_return = np.sum(expected_returns * weight_array)
+            portfolio_vol = np.sqrt(np.dot(weight_array.T, np.dot(cov_matrix, weight_array)))
+            sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_vol if portfolio_vol > 0 else 0
+            
+            return {
+                'weights': matched_weights,
+                'expected_return': portfolio_return,
+                'volatility': portfolio_vol,
+                'sharpe_ratio': sharpe_ratio,
+                'method': 'ai_based',
+                'ai_reasoning': ai_allocation.get('reasoning', ''),
+                'market_outlook': ai_allocation.get('market_outlook', ''),
+                'risk_assessment': ai_allocation.get('risk_assessment', ''),
+                'portfolio_strategy': ai_etf_selection.get('portfolio_strategy', ''),
+                'rebalancing_trigger': ai_etf_selection.get('rebalancing_trigger', [])
+            }
+            
+        except Exception as e:
+            print(f"AI 기반 최적화 실패: {e}")
+            return self._maximize_sharpe_ratio(returns_df)
     
     def _prepare_returns_data(self, returns_data):
         """수익률 데이터 준비"""
@@ -203,13 +262,87 @@ class PortfolioOptimizer:
         }
     
     def _get_etf_category(self, etf_name):
-        """ETF 카테고리 분류"""
-        if any(keyword in etf_name for keyword in ['KODEX 200', 'TIGER', '반도체', '바이오', '2차전지']):
-            return '주식'
-        elif any(keyword in etf_name for keyword in ['국고채', '회사채', '단기채권']):
-            return '채권'
+        """ETF 카테고리 분류 (국내 중심)"""
+        if any(keyword in etf_name for keyword in ['KODEX 200', 'TIGER 200', '코스피', '코스닥', '반도체']):
+            return '국내주식'
+        elif any(keyword in etf_name for keyword in ['국고채', '회사채', '단기채권', '통안채']):
+            return '국내채권'
+        elif any(keyword in etf_name for keyword in ['바이오', '2차전지', '신재생', '게임', '미디어', 'ESG']):
+            return '국내섹터'
         else:
-            return '대안투자'
+            return '국내대안'
+
+    def _lifecycle_allocation(self, returns_df, user_profile):
+        """생애주기별 자산배분 (국내 중심)"""
+        age = user_profile.get('age', 30)
+        risk_tolerance = user_profile.get('risk_tolerance', '위험중립형')
+        
+        # 생애주기 분류
+        if age < 40:
+            lifecycle_stage = '청년층'
+        elif age < 55:
+            lifecycle_stage = '중년층'
+        else:
+            lifecycle_stage = '장년층'
+        
+        # 기본 배분 비율 (국내 중심)
+        base_allocation = LIFECYCLE_ALLOCATION[lifecycle_stage]
+        risk_allocation = RISK_ALLOCATION[risk_tolerance]
+        
+        # 가중평균으로 최종 배분 결정
+        final_allocation = {}
+        for asset_class in base_allocation.keys():
+            final_allocation[asset_class] = (
+                base_allocation[asset_class] * 0.7 + 
+                risk_allocation[asset_class] * 0.3
+            )
+        
+        # ETF별 가중치 계산
+        weights = {}
+        total_weight = 0
+        
+        for etf_name in returns_df.columns:
+            etf_category = self._get_etf_category(etf_name)
+            
+            # 카테고리별 매핑
+            if etf_category == '국내주식':
+                category_weight = final_allocation['국내주식']
+            elif etf_category == '국내채권':
+                category_weight = final_allocation['국내채권']
+            elif etf_category == '국내섹터':
+                category_weight = final_allocation['국내섹터']
+            else:
+                category_weight = final_allocation['국내대안']
+            
+            # 카테고리 내 균등분배
+            category_etfs = [name for name in returns_df.columns 
+                          if self._get_etf_category(name) == etf_category]
+            
+            weights[etf_name] = category_weight / len(category_etfs)
+            total_weight += weights[etf_name]
+        
+        # 가중치 정규화
+        if total_weight > 0:
+            weights = {k: v/total_weight for k, v in weights.items()}
+        
+        # 성과 지표 계산
+        weight_array = np.array([weights[col] for col in returns_df.columns])
+        expected_returns = returns_df.mean() * 252
+        cov_matrix = returns_df.cov() * 252
+        
+        portfolio_return = np.sum(expected_returns * weight_array)
+        portfolio_vol = np.sqrt(np.dot(weight_array.T, np.dot(cov_matrix, weight_array)))
+        sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_vol if portfolio_vol > 0 else 0
+        
+        return {
+            'weights': weights,
+            'expected_return': portfolio_return,
+            'volatility': portfolio_vol,
+            'sharpe_ratio': sharpe_ratio,
+            'method': 'lifecycle',
+            'lifecycle_stage': lifecycle_stage,
+            'allocation': final_allocation
+        }
     
     def _get_equal_weight_portfolio(self, assets):
         """균등가중 포트폴리오"""
