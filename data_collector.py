@@ -15,9 +15,13 @@ class DataCollector:
         self.ecos_api_key = Config.ECOS_API_KEY
         self.ecos_url = Config.ECOS_API_URL
         
-    def get_etf_data(self, period='1y'):
-        """PyKRX를 사용한 ETF 데이터 수집"""
+    def get_etf_data(self, period='1y', progress_callback=None):
+        """PyKRX를 사용한 ETF 데이터 수집 (진행상황 표시)"""
         etf_data = {}
+        
+        # 전체 ETF 수 계산
+        total_etfs = sum(len(etfs) for etfs in ETF_CODES.values())
+        current_etf = 0
         
         # 기간 설정
         end_date = datetime.now().strftime('%Y%m%d')
@@ -35,11 +39,13 @@ class DataCollector:
                 category_data = {}
                 
                 for code, name in etfs.items():
+                    current_etf += 1
+                    
+                    if progress_callback:
+                        progress_callback(current_etf, total_etfs, f"수집 중: {name}")
+                    
                     try:
                         # PyKRX로 ETF 가격 데이터 수집
-                        print(f"데이터 수집 중: {name} ({code})")
-                        
-                        # 일별 가격 데이터
                         df = stock.get_etf_ohlcv_by_date(start_date, end_date, code)
                         
                         if df is not None and not df.empty:
@@ -49,13 +55,6 @@ class DataCollector:
                             # 최신 정보
                             latest_price = df['종가'].iloc[-1]
                             latest_volume = df['거래량'].iloc[-1]
-                            
-                            # ETF 기본 정보 (포트폴리오 구성 등)
-                            try:
-                                etf_portfolio = stock.get_etf_portfolio_deposit_file(code)
-                                portfolio_info = etf_portfolio if etf_portfolio is not None else pd.DataFrame()
-                            except:
-                                portfolio_info = pd.DataFrame()
                             
                             category_data[name] = {
                                 'code': code,
@@ -69,14 +68,10 @@ class DataCollector:
                                     '종가': 'Close',
                                     '거래량': 'Volume'
                                 }),
-                                'portfolio_composition': portfolio_info,
                                 'category': category
                             }
                             
-                            print(f"✅ {name} 데이터 수집 완료")
-                            
                         else:
-                            print(f"❌ {name} 데이터 없음 - 샘플 데이터 생성")
                             category_data[name] = self._generate_sample_etf_data(code, name, category)
                         
                         # API 호출 제한 방지

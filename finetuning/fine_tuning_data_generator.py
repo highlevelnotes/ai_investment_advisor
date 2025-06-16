@@ -157,8 +157,8 @@ def generate_fine_tuning_dataset():
     """파인튜닝 데이터셋 생성 메인 함수"""
     generator = FineTuningDataGenerator()
     
-    # 프롬프트 템플릿 정의
-    market_analysis_prompt = """
+    # risk_scenario_prompt 사용
+    risk_scenario_prompt = """
 퇴직연금 포트폴리오 리스크 관리 전문가로서 다음 시나리오에 대한 대응 전략을 제시해주세요.
 
 **시나리오:** {scenario_description}
@@ -183,14 +183,14 @@ def generate_fine_tuning_dataset():
     print("Generating training data...")
     training_data = generator.generate_training_data(
         scenarios, 
-        market_analysis_prompt, 
-        'market_analysis'
+        risk_scenario_prompt,  # 변경된 프롬프트
+        'risk_scenario'        # 변경된 데이터 타입
     )
     
     # 데이터 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"pension_portfolio_training_data_{timestamp}.csv"
-    jsonl_filename = f"pension_portfolio_training_data_{timestamp}.jsonl"
+    csv_filename = f"pension_risk_scenario_training_data_{timestamp}.csv"
+    jsonl_filename = f"pension_risk_scenario_training_data_{timestamp}.jsonl"
     
     generator.save_to_csv(training_data, csv_filename)
     generator.save_to_jsonl(training_data, jsonl_filename)
