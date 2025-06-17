@@ -67,10 +67,14 @@ class AIAnalyzer:
         macro_summary = self._format_macro_data(macro_data)
         
         prompt = f"""
-{age}세 {risk_tolerance} 투자자를 위한 퇴직연금 분석을 해주세요.
+당신은 한국 퇴직연금 전문 분석가입니다. 아래 지시사항을 정확히 따라 답변하세요.
+
+**중요: 다섯 가지 제목을 반드시 사용하세요. 반드시 아래 양식 그대로 답변하세요. 각 섹션의 제목을 정확히 사용하세요.**
+
+투자자 정보: {age}세 {risk_tolerance} 투자자를 위한 퇴직연금 분석을 해주세요.
 경제상황: {macro_summary}
 
-다음 순서로 답변해주세요:
+---
 
 [매크로경제분석]
 한국 경제 현황과 전망을 2-3문장으로 설명하세요.
@@ -88,8 +92,13 @@ class AIAnalyzer:
 8개 국내 ETF로 JSON 포트폴리오를 제시하세요.
 {{"KODEX 200": 0.20, "TIGER 200": 0.15, "KODEX 국고채10년": 0.25, "KODEX 단기채권": 0.15, "KODEX 2차전지산업": 0.10, "KODEX 골드선물(H)": 0.08, "TIGER 국내리츠": 0.07}}
 
-각 섹션 사이에 빈 줄을 넣어주세요.
+**주의사항:**
+1. 각 섹션 제목은 대괄호 [] 안에 정확히 작성
+2. 각 섹션 사이에 빈 줄 삽입
+3. 포트폴리오는 JSON 형식만 사용
+4. 추가 설명이나 서론/결론 금지
 """
+        print(prompt)
         return prompt
     
     def _parse_by_linebreaks(self, response_text: str, etf_data: Dict, user_profile: Dict) -> Dict:

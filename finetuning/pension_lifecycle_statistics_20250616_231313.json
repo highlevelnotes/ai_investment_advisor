@@ -1,0 +1,26 @@
+{
+  "total_samples": 500,
+  "age_distribution": {
+    "middle": 199,
+    "pre_retire": 100,
+    "young": 153,
+    "senior": 48
+  },
+  "life_stage_distribution": {
+    "자산증식기": 119,
+    "은퇴직전기": 42,
+    "자산축적기": 281,
+    "은퇴준비기": 58
+  },
+  "risk_tolerance_distribution": {
+    "위험중립형": 122,
+    "안정추구형": 122,
+    "적극투자형": 115,
+    "안정형": 141
+  },
+  "asset_range": {
+    "min": 5110000,
+    "max": 299730000,
+    "avg": 74651940.0
+  }
+}

@@ -274,7 +274,7 @@ def generate_lifecycle_fine_tuning_dataset():
     
     # 시나리오 생성
     print("Generating lifecycle scenarios...")
-    scenarios = generator.generate_lifecycle_scenarios(300)  # 300개 샘플 생성
+    scenarios = generator.generate_lifecycle_scenarios(500)  # 300개 샘플 생성
     
     # 훈련 데이터 생성
     print("Generating training data...")
