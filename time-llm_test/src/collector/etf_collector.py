@@ -7,7 +7,6 @@ import time
 from typing import List, Dict, Tuple, Optional
 from urllib.parse import urlencode
 import FinanceDataReader as fdr
-from pykrx import stock as pkstock
 from bs4 import BeautifulSoup
 
 class KoreanETFCollector:
@@ -75,6 +74,10 @@ class KoreanETFCollector:
                     'changeRate': 'change_rate'
                 })
                 
+                # 기본 컬럼 추가 (FDR 대신)
+                df['market'] = 'KRX'
+                df['sector'] = 'ETF'
+                
                 self.logger.info(f"네이버에서 {len(df)}개 ETF 수집 완료")
                 return df
             else:
@@ -83,26 +86,6 @@ class KoreanETFCollector:
                 
         except Exception as e:
             self.logger.error(f"네이버 ETF 목록 수집 오류: {str(e)}")
-            return pd.DataFrame()
-    
-    def collect_fdr_etf_list(self) -> pd.DataFrame:
-        """FinanceDataReader로 ETF 목록 수집"""
-        try:
-            self.logger.info("FinanceDataReader에서 ETF 목록 수집 중...")
-            
-            etf_df = fdr.StockListing('ETF/KR')
-            etf_df = etf_df.rename(columns={
-                'Symbol': 'code',
-                'Name': 'name',
-                'Market': 'market',
-                'Sector': 'sector'
-            })
-            
-            self.logger.info(f"FinanceDataReader에서 {len(etf_df)}개 ETF 수집 완료")
-            return etf_df
-            
-        except Exception as e:
-            self.logger.error(f"FinanceDataReader ETF 목록 수집 오류: {str(e)}")
             return pd.DataFrame()
     
     def is_pension_eligible_etf(self, etf_info: Dict) -> Tuple[bool, str]:
@@ -173,30 +156,17 @@ class KoreanETFCollector:
         return result_df
     
     def get_comprehensive_etf_list(self) -> pd.DataFrame:
-        """종합 ETF 목록 수집"""
+        """종합 ETF 목록 수집 (네이버만 사용)"""
         self.logger.info("종합 ETF 목록 수집 시작...")
         
-        # 여러 소스에서 ETF 목록 수집
+        # 네이버에서만 ETF 목록 수집 (더 안정적)
         naver_df = self.collect_naver_etf_list()
-        fdr_df = self.collect_fdr_etf_list()
         
-        # 데이터 병합
-        if not naver_df.empty and not fdr_df.empty:
-            # 네이버 데이터를 기준으로 하되, FDR 데이터로 보완
-            merged_df = naver_df.merge(
-                fdr_df[['code', 'market', 'sector']], 
-                on='code', 
-                how='left'
-            )
-        elif not naver_df.empty:
-            merged_df = naver_df
-        elif not fdr_df.empty:
-            merged_df = fdr_df
-        else:
-            self.logger.error("모든 ETF 목록 수집 실패")
+        if naver_df.empty:
+            self.logger.error("ETF 목록 수집 실패")
             return pd.DataFrame()
         
         # 퇴직연금 투자 가능 ETF 필터링
-        pension_eligible_df = self.filter_pension_eligible_etfs(merged_df)
+        pension_eligible_df = self.filter_pension_eligible_etfs(naver_df)
         
         return pension_eligible_df

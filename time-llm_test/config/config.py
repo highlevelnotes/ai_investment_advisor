@@ -9,7 +9,6 @@ class DataCollectionConfig:
     """데이터 수집 설정"""
     # API 설정
     naver_api_endpoint: str = "https://finance.naver.com/api/sise/etfItemList.nhn"
-    krx_api_endpoint: str = "http://data.krx.co.kr/comm/fileDn/GenerateOTP/generate.cmd"
     
     # 퇴직연금 투자 제한 설정
     max_derivative_risk_ratio: float = 40.0  # 파생상품 위험평가액 40% 초과 금지
