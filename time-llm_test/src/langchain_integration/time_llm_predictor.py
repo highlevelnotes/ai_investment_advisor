@@ -86,11 +86,11 @@ class LangChainTimeLLMPredictor:
         return logger
     
     def _initialize_model(self):
-        """ChatClovaX 모델 초기화"""
+        """ChatClovaX 모델 초기화 (새로운 Bearer 토큰 방식)"""
         try:
             model_params = {
                 "clovastudio_api_key": self.api_key,
-                "apigw_api_key": self.apigw_api_key,
+                # apigw_api_key 제거 (더 이상 필요 없음)
                 "max_tokens": 512,
                 "temperature": 0.3,
                 "top_p": 0.6,
